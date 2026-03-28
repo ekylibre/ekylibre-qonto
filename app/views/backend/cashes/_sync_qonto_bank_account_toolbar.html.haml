@@ -1,0 +1,5 @@
+- qonto_requisition = Integration.find_by(nature: 'qonto').present?
+
+= tool_to(:sync_qonto_bank_transactions.tl, perform_qonto_qonto_synchronization_path(cash_id: resource.id), disabled: !qonto_requisition)
+
+

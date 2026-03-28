@@ -1,0 +1,12 @@
+fra:
+  labels:
+    qonto_incoming_data_exchange: "Relevés de comptes, factures et pièce justificatives"
+    qonto_outgoing_data_exchange: "Demande de paiement"
+    qonto_short_description: Banque en ligne pro
+    qonto_long_description:  Pilotez votre compte pro et vos finances en sécurité, au même endroit
+    qonto_url: https://qonto.com/
+    sync_qonto_bank_transactions: "Synchroniser les relevés de compte QONTO"
+    error_during_transactions_synchronization: "Une erreur est survenue lors de la synchronisation des relevés de compte : %{message}"
+    iban_should_be_provided: "Pour synchroniser les relevés, l'IBAN du compte doit être renseigné."
+    cash_transactions_synchronizing: "La synchronisation des relevés de compte bancaire est en cours. Une notification vous sera envoyée dès qu'elle sera terminée."
+    cash_transactions_synchronized: "Les relevés de compte bancaire ont bien été synchronisés."

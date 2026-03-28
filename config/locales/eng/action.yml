@@ -1,0 +1,45 @@
+eng:
+  actions: 
+    backend/rides:
+      index: "Geolocated Rides"
+      show: "Geolocated Ride: %{number}"
+    backend/ride_sets:
+      index: "Geolocated Rides"
+      show: "Geolocated Ride: %{number}"
+  labels:
+    create_from_planned_intervention: "Create from planned intervention"
+    samsys_incoming_data_exchange: "Equipments, sensors and geolocated rides"
+    samsys_outgoing_data_exchange: "Cultivable zones"
+    area_without_overlap: "Area without overlap"
+    area_with_overlap: "Area with overlap"
+    converted: "Converted"
+    correct_samsys_fetch_params: "Samsys synchronisation is over, New ride sets are available in Ekylibre."
+    failed_samsys_fetch_params: "An error occured during Samsys synchronisation."
+    ride_set_message: "
+To synchronize your geolocated trips with your connected sensors, please configure your account in Tools > Integrations"
+    samsys_short_description: Equipment geotracking sensors
+    samsys_long_description:  Samsys provides geotracking sensors for equipment monitoring
+    samsys_url: https://samsys.fr/
+    hard_start: "Hard start"
+    hard_stop: "Hard stop"
+    partially_converted: "Partially converted"
+    pause: "Pause"
+    point: "Point"
+    resume: "CV"
+    ride: "Ride"
+    road: "Total distance"
+    samsys_synchronisation: Samsys synchronisation
+    scan: "Scan"
+    sleep_duration: "Sleep duration"
+    start: "Start"
+    started_at: "Start of the ride"
+    stop: "Stop"
+    started_at: "Started at"
+    startend: "Start / end"
+    ride_geo: "Geolocated ride"
+    ride_number: "Number"
+    ride_paused_at: "Break at"
+    ride_duration: "Duration"
+    ride_set_to_ride_information: "Click on a geolocated ride to view it on a map, then select its different sections to convert it into an intervention"
+    road: "Total distance in km"
+    to_convert: "To convert"
