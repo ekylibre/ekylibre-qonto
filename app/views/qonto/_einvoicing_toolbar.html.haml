@@ -1,0 +1,11 @@
+- if resource.is_a?(Sale) && resource.invoice?
+  - outbound = Qonto::OutboundInvoice.find_by(sale: resource)
+  - if outbound.nil?
+    - if Qonto::MandatoryMentions.new(resource).complete?
+      = tool_to :send_by_einvoice.tl, qonto_send_sale_einvoice_path(resource), method: :post
+    - else
+      = tool_to :send_by_einvoice.tl, '#', disabled: true, title: :complete_mentions_before_sending.tl
+  - elsif outbound.in_progress?
+    = tool_to :einvoice_in_progress.tl, '#', disabled: true
+  - elsif outbound.failed?
+    = tool_to :resend_einvoice.tl, qonto_send_sale_einvoice_path(resource), method: :post

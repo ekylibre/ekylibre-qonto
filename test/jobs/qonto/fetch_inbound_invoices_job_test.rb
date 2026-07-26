@@ -19,18 +19,12 @@ class Qonto::FetchInboundInvoicesJobTest < ::Ekylibre::Testing::ApplicationTestC
     assert Qonto::InboundInvoice.exists?(remote_id: 'g-1')
   end
 
-  def test_schedulable_requires_flag_and_integration
-    EInvoicing::Gateway.stub(:enabled?, false) do
-      refute Qonto::FetchInboundInvoicesJob.schedulable?, 'off when feature disabled'
+  def test_schedulable_requires_a_qonto_integration
+    Integration.stub(:exists?, false) do
+      refute Qonto::FetchInboundInvoicesJob.schedulable?, 'off without a Qonto integration'
     end
-
-    EInvoicing::Gateway.stub(:enabled?, true) do
-      Integration.stub(:exists?, false) do
-        refute Qonto::FetchInboundInvoicesJob.schedulable?, 'off without a Qonto integration'
-      end
-      Integration.stub(:exists?, true) do
-        assert Qonto::FetchInboundInvoicesJob.schedulable?, 'on when enabled and integration present'
-      end
+    Integration.stub(:exists?, true) do
+      assert Qonto::FetchInboundInvoicesJob.schedulable?, 'on when the integration is configured'
     end
   end
 

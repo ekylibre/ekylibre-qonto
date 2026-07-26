@@ -21,5 +21,13 @@ Rails.application.routes.draw do
         post :attach_supplier
       end
     end
+
+    resources :outbound_invoices, only: %i[index] do
+      member { get :status }
+    end
+    post 'sales/:sale_id/send_einvoice', to: 'outbound_invoices#create', as: :send_sale_einvoice
+
+    # Qonto webhook — no session/CSRF, HMAC-verified (see WebhooksController).
+    post 'webhooks/client_invoices', to: 'webhooks#client_invoices'
   end
 end

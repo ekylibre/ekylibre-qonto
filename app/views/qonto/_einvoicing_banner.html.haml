@@ -1,0 +1,14 @@
+- settings = Qonto::EInvoicingSettings.cached
+- if settings.receiving_disabled?
+  - days = (Date.new(2026, 9, 1) - Date.current).to_i
+  .alert.alert-danger
+    %strong= :einvoicing_not_connected.tl
+    %p
+      - if days >= 0
+        = :einvoicing_reception_mandatory_in.tl(days: days)
+      - else
+        = :einvoicing_reception_overdue.tl
+    = link_to :einvoicing_activate.tl, 'https://qonto.com', class: 'btn btn-primary btn-sm', target: '_blank', rel: 'noopener'
+- elsif settings.pending?
+  .alert.alert-info
+    = :einvoicing_activation_pending.tl

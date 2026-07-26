@@ -6,6 +6,15 @@
         <page to="qonto/inbound_invoices#index"/>
         <page to="qonto/inbound_invoices#ignore"/>
         <page to="qonto/inbound_invoices#create_purchase"/>
+        <page to="qonto/inbound_invoices#attach_supplier"/>
+      </item>
+    </group>
+  </part>
+  <part name="sales">
+    <group name="sales">
+      <item name="qonto_outbound_invoices">
+        <page to="qonto/outbound_invoices#index"/>
+        <page to="qonto/outbound_invoices#create"/>
       </item>
     </group>
   </part>

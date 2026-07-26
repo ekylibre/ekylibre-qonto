@@ -32,10 +32,11 @@ vocabulary (`submit`, `issued`, `received`), not Qonto's:
 | `EInvoicing::Adapters::Null` | tenant without integration — the UI degrades instead of crashing |
 | `EInvoicing::Adapters::Fake` | tests & staging (Qonto e-invoicing does not exist in sandbox) |
 
-The gateway is gated per tenant by the `qonto_einvoicing_enabled` boolean
-preference (`Preference[:qonto_einvoicing_enabled]`). `EInvoicing::Gateway.build`
-returns the Qonto adapter only when the flag is on **and** a Qonto integration
-exists, otherwise the Null adapter.
+`EInvoicing::Gateway.build` returns the Qonto adapter as soon as a Qonto
+integration is configured for the tenant (`EInvoicing::Gateway.available?`),
+otherwise the Null adapter — a configured integration is the single source of
+truth, there is no separate manual toggle. The compliance banner reads the real
+reception state from the API (cached) via `Qonto::EInvoicingSettings`.
 
 ## Documentation
 

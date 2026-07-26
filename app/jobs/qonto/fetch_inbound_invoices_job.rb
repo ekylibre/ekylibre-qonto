@@ -8,15 +8,17 @@ module Qonto
     queue_as :default
 
     # Whether the hourly scheduler should enqueue this job for the current
-    # tenant: only when e-invoicing is enabled AND a Qonto integration exists.
-    # Avoids enqueuing a no-op (Null-adapter) job on every tenant every hour.
+    # tenant: only when a Qonto integration is configured. Avoids enqueuing a
+    # no-op (Null-adapter) job on every tenant every hour.
     def self.schedulable?
-      EInvoicing::Gateway.enabled? && Integration.exists?(nature: 'qonto')
-    rescue StandardError
-      false
+      EInvoicing::Gateway.available?
     end
 
     def perform(user_id: nil)
+      # Keep the compliance banner (S1) fresh without a synchronous HTTP call in
+      # any view render.
+      Qonto::EInvoicingSettings.refresh!
+
       gateway = EInvoicing::Gateway.build
       invoices = gateway.inbound_since(last_sync_at)
       created = Qonto::InboundInvoicesImportService.call(invoices: invoices)

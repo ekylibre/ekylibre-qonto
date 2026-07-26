@@ -1,0 +1,22 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://thirdparty.qonto.com/v2/clients
+    body:
+      encoding: UTF-8
+      string: ''
+    headers: {}
+  response:
+    status:
+      code: 201
+      message: Created
+    headers:
+      Content-Type:
+      - application/json
+    body:
+      encoding: UTF-8
+      string: '{"client":{"id":"cli-uuid-1","name":"ACME","kind":"company"}}'
+    http_version: '1.1'
+  recorded_at: Wed, 01 Jan 2020 00:00:00 GMT
+recorded_with: VCR 6.0.0

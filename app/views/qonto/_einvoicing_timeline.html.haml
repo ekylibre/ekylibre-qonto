@@ -1,0 +1,14 @@
+-# Single source of truth for the lifecycle timeline: rendered inside the cobble
+-# and re-rendered server-side by the status endpoint for progressive polling.
+- codes = Array(outbound.lifecycle_events).map { |e| e['code'].to_s }
+%ul.list-group.einvoicing-timeline{ data: { poll_url: status_qonto_outbound_invoice_path(outbound), poll: outbound.in_progress? } }
+  - Qonto::OutboundInvoice::STEPS.each do |step|
+    - done = codes.include?(step[:code])
+    %li.list-group-item{ class: (done ? 'list-group-item-success' : 'text-muted') }
+      = "einvoice_status_#{step[:status]}".to_sym.tl
+      - event = outbound.event_for(step[:code])
+      - if event && event['occurred_at']
+        %span.badge= event['occurred_at']
+- if outbound.failed?
+  .alert.alert-warning{ style: 'margin-top: .6em' }
+    = Qonto::ErrorTranslator.human(outbound.last_error['code'])

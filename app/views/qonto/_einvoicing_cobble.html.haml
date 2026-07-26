@@ -1,0 +1,39 @@
+- if resource.is_a?(Sale) && resource.invoice?
+  - outbound = Qonto::OutboundInvoice.find_by(sale: resource)
+  - c.cobble :einvoicing, title: :electronic_invoicing.tl do
+    - if outbound
+      = render 'qonto/einvoicing_timeline', outbound: outbound
+      -# Progressive enhancement: poll the server-rendered timeline while the
+      -# emission is in progress. Inlined (no Sprockets asset) and Turbolinks-safe.
+      :javascript
+        (function () {
+          'use strict';
+          var timer = null;
+          function stop() { if (timer) { clearInterval(timer); timer = null; } }
+          function tick() {
+            var $el = $('.einvoicing-timeline[data-poll="true"]');
+            if (!$el.length) { stop(); return; }
+            $.getJSON($el.data('poll-url'), function (data) {
+              var $cur = $('.einvoicing-timeline');
+              if ($cur.length) { $cur.replaceWith(data.html); }
+              if (!data.in_progress) { stop(); }
+            });
+          }
+          function start() {
+            stop();
+            if ($('.einvoicing-timeline[data-poll="true"]').length) { timer = setInterval(tick, 15000); }
+          }
+          $(document).off('turbolinks:load.qontoEinvoicing').on('turbolinks:load.qontoEinvoicing', start);
+          $(document).off('turbolinks:before-cache.qontoEinvoicing').on('turbolinks:before-cache.qontoEinvoicing', stop);
+          start();
+        })();
+    - else
+      - mentions = Qonto::MandatoryMentions.new(resource)
+      - if mentions.complete?
+        %p.text-muted= :einvoice_ready_to_send.tl
+      - else
+        .alert.alert-info
+          %strong= :mandatory_mentions_incomplete.tl
+          %ul{ style: 'margin: .4em 0 0' }
+            - mentions.missing.each do |mention|
+              %li= "einvoice_mention_#{mention}".to_sym.tl

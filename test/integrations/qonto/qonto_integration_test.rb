@@ -27,4 +27,17 @@ class QontoIntegrationTest < ::Ekylibre::Testing::ApplicationTestCase::WithFixtu
     assert_equal 3, transactions.size, 'transactions from both pages must be returned'
     assert_equal %w[q1 q2 q3], transactions.map { |t| t[:id] }
   end
+
+  # POST /v2/clients — the response wraps the created client under "client".
+  def test_create_client_returns_the_wrapped_client
+    result = nil
+    VCR.use_cassette('create_client') do
+      Qonto::QontoIntegration.create_client(name: 'ACME', kind: 'company').execute do |c|
+        c.success { |body| result = body }
+      end
+    end
+
+    refute_nil result, 'the success block should have run'
+    assert_equal 'cli-uuid-1', result.dig(:client, :id)
+  end
 end

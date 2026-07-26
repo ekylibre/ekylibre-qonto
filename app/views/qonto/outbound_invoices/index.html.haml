@@ -1,0 +1,26 @@
+- main_informations do
+  - if @stalled.positive?
+    .alert.alert-warning= :einvoices_stalled_warning.tl(count: @stalled)
+  - if @outbound_invoices.empty?
+    %p.text-muted.text-center{ style: 'padding: 2em' }= :no_einvoice_sent_yet.tl
+  - else
+    %table.table.table-striped.table-hover
+      %thead
+        %tr
+          %th= :sale.tl
+          %th= :status.tl
+          %th= :submitted_at.tl
+          %th
+      %tbody
+        - @outbound_invoices.each do |outbound|
+          - klass = outbound.failed? ? 'label-danger' : (outbound.received? ? 'label-success' : 'label-info')
+          %tr
+            %td= link_to outbound.sale.number, backend_sale_path(outbound.sale)
+            %td
+              %span.label{ class: klass }= "einvoice_status_#{outbound.status}".to_sym.tl
+              - if outbound.failed? && outbound.last_error['code'].present?
+                %small.text-muted= Qonto::ErrorTranslator.human(outbound.last_error['code'])
+            %td= outbound.submitted_at&.l
+            %td.right-align
+              - if outbound.failed?
+                = link_to :resend_einvoice.tl, qonto_send_sale_einvoice_path(outbound.sale), method: :post, class: 'btn btn-warning btn-xs'

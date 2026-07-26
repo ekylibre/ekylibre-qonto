@@ -27,7 +27,8 @@ module Qonto
       parameter :client_secret
     end
 
-    calls :list_transactions, :show_attachment, :get_organization, :einvoicing_settings, :list_clients, :list_supplier_invoices
+    calls :list_transactions, :show_attachment, :get_organization, :einvoicing_settings, :list_clients, :create_client, :list_supplier_invoices,
+          :create_client_invoice, :send_client_invoice, :get_client_invoice
 
     # Connection check.
     # Uses GET /v2/organization (the authenticated organization) instead of the
@@ -130,6 +131,17 @@ module Qonto
       response
     end
 
+    # Clients — POST /v2/clients. Qonto requires the client to pre-exist before
+    # a client_invoice can reference it (client_id is mandatory), so emission
+    # resolves the client and creates it here when missing.
+    def create_client(payload)
+      integration = fetch
+      post_json("#{BASE_URL}/clients", payload, authentication_header(integration)) do |r|
+        r.success { JSON(r.body).deep_symbolize_keys }
+        r.error   { safe_json(r.body) }
+      end
+    end
+
     # Supplier invoices — GET /v2/supplier_invoices (RECEPTION, paginated).
     # @param updated_at_from [String, nil] ISO8601 lower bound to only pull the
     #   invoices changed since the last sync.
@@ -160,7 +172,40 @@ module Qonto
       response
     end
 
+    # Emission (client invoices) — production only (no sandbox e-invoicing).
+    # POST /v2/client_invoices
+    def create_client_invoice(payload)
+      integration = fetch
+      post_json("#{BASE_URL}/client_invoices", payload, authentication_header(integration)) do |r|
+        r.success { JSON(r.body).deep_symbolize_keys }
+        r.error   { safe_json(r.body) }
+      end
+    end
+
+    # POST /v2/client_invoices/{id}/send_by_einvoice → 204 accepted for processing
+    def send_client_invoice(id)
+      integration = fetch
+      post_json("#{BASE_URL}/client_invoices/#{id}/send_by_einvoice", {}, authentication_header(integration)) do |r|
+        r.success { true }
+        r.error   { safe_json(r.body) }
+      end
+    end
+
+    # GET /v2/client_invoices/{id} → einvoicing_status + einvoicing_lifecycle_events[]
+    def get_client_invoice(id)
+      integration = fetch
+      get_json("#{BASE_URL}/client_invoices/#{id}", authentication_header(integration)) do |r|
+        r.success { JSON(r.body).deep_symbolize_keys }
+      end
+    end
+
     private
+
+      def safe_json(body)
+        JSON(body).deep_symbolize_keys
+      rescue StandardError
+        {}
+      end
 
       def authentication_header(integration)
         login = "#{integration.parameters['client_id']}:#{integration.parameters['client_secret']}"

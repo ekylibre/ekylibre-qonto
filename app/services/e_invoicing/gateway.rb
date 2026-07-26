@@ -23,34 +23,21 @@ module EInvoicing
       end
     end
 
-    # Per-tenant feature flag (Q-C): the gateway is opt-in per tenant.
-    FEATURE_FLAG = :qonto_einvoicing_enabled
-
     class << self
-      # Selects the adapter for the current tenant. Falls back to the Null
-      # adapter (never raises) when the feature is off or no integration exists,
-      # so callers/UI degrade gracefully.
+      # Selects the adapter for the current tenant: the Qonto adapter as soon as
+      # a Qonto integration is configured, the Null adapter otherwise (so callers
+      # and UI degrade gracefully). No separate manual toggle — a configured
+      # integration is the single source of truth.
       def build
-        return Adapters::Null.new unless enabled? && integration_present?
-
-        Adapters::Qonto.new
+        available? ? Adapters::Qonto.new : Adapters::Null.new
       end
 
-      def enabled?
-        # Custom (non-predefined) preference: read the row directly, since
-        # Preference[] only accepts preferences declared in the core reference.
-        !!Preference.find_by(name: FEATURE_FLAG.to_s)&.value
+      # Whether a usable Qonto e-invoicing gateway is configured for the tenant.
+      def available?
+        Integration.exists?(nature: 'qonto')
       rescue StandardError
         false
       end
-
-      private
-
-        def integration_present?
-          Integration.exists?(nature: 'qonto')
-        rescue StandardError
-          false
-        end
     end
 
     # @return [Symbol] :enabled | :disabled | :pending | :unavailable
