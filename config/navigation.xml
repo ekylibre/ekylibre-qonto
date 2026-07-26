@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<navigation>
+  <part name="purchases">
+    <group name="purchases">
+      <item name="qonto_inbound_invoices">
+        <page to="qonto/inbound_invoices#index"/>
+        <page to="qonto/inbound_invoices#ignore"/>
+        <page to="qonto/inbound_invoices#create_purchase"/>
+      </item>
+    </group>
+  </part>
+</navigation>

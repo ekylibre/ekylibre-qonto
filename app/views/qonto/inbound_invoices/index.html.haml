@@ -1,0 +1,40 @@
+- main_informations do
+  %ul.nav.nav-tabs
+    - Qonto::InboundInvoice::STATUSES.each do |status|
+      %li{ class: ('active' if status == @status) }
+        = link_to qonto_inbound_invoices_path(status: status) do
+          = "einvoice_status_#{status}".to_sym.tl
+          %span.badge= @counts[status].to_i
+
+  - if @inbound_invoices.empty?
+    %p.text-muted.text-center{ style: 'padding: 2em' }= :einvoicing_inbox_empty.tl
+  - else
+    %table.table.table-striped.table-hover
+      %thead
+        %tr
+          %th= :issued_on.tl
+          %th= :supplier.tl
+          %th= :invoice_number.tl
+          %th.right-align= :amount.tl
+          %th
+      %tbody
+        - @inbound_invoices.each do |invoice|
+          %tr
+            %td= invoice.issued_on&.l
+            %td
+              - if invoice.supplier_known?
+                %span.label.label-success= invoice.entity.full_name
+              - else
+                %span.label.label-warning{ title: invoice.supplier_siret }= invoice.supplier_name.presence || :unknown_supplier.tl
+                - if invoice.to_review?
+                  = simple_form_for invoice, url: attach_supplier_qonto_inbound_invoice_path(invoice), method: :post, builder: Backend::FormBuilder, html: { class: 'form-inline qonto-attach-supplier' } do |f|
+                    = f.referenced_association :entity, source: { controller: '/backend/entities', action: :unroll, scope: :suppliers }, new: { controller: '/backend/entities', action: :new }, label: false, placeholder: :associate_a_supplier.tl
+                    = f.submit :associate.tl, class: 'btn btn-default btn-xs'
+            %td= invoice.invoice_number
+            %td.right-align= "#{invoice.amount} #{invoice.currency}"
+            %td.right-align
+              - if invoice.to_review?
+                = link_to :create_the_purchase.tl, create_purchase_qonto_inbound_invoice_path(invoice), method: :post, class: 'btn btn-primary btn-xs'
+                = link_to :ignore.tl, ignore_qonto_inbound_invoice_path(invoice), method: :post, class: 'btn btn-default btn-xs'
+              - elsif invoice.matched? && invoice.purchase_id
+                = link_to :view_the_purchase.tl, backend_purchase_path(invoice.purchase_id), class: 'btn btn-default btn-xs'

@@ -109,8 +109,13 @@ module Qonto
       end
 
       def bank_statement_item_already_exists?(item)
-        (item.transaction_number.present? && BankStatementItem.find_by(transaction_number: item.transaction_id)) ||
-          (item.id.present? && BankStatementItem.of_provider(PROVIDER_VENDOR, PROVIDER_NAME, item.id).any?)
+        # Idempotence keys, in order of reliability:
+        #   - the Qonto provider id (item.id) stored in the provider jsonb;
+        #   - the transaction_number column, fed from item.transaction_id.
+        # Note: the Qonto payload has no `transaction_number` field (that was a
+        # dead check on the struct) — the business key is item.transaction_id.
+        (item.id.present? && BankStatementItem.of_provider(PROVIDER_VENDOR, PROVIDER_NAME, item.id).any?) ||
+          (item.transaction_id.present? && BankStatementItem.exists?(transaction_number: item.transaction_id))
       end
 
       def create_bank_statement_item(bank_statement, item)

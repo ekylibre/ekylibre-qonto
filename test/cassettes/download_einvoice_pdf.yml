@@ -1,0 +1,22 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://files.qonto.test/einvoice-dl-1.pdf
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers: {}
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/pdf
+    body:
+      encoding: UTF-8
+      string: "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n"
+    http_version: '1.1'
+  recorded_at: Wed, 01 Jan 2020 00:00:00 GMT
+recorded_with: VCR 6.0.0

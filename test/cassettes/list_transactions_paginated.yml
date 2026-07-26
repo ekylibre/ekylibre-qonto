@@ -1,0 +1,41 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://thirdparty.qonto.com/v2/transactions?current_page=1&iban=FR7611111222223333333333391&per_page=100
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers: {}
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+    body:
+      encoding: UTF-8
+      string: '{"transactions":[{"id":"q1","transaction_id":"tx-1"},{"id":"q2","transaction_id":"tx-2"}],"meta":{"current_page":1,"next_page":2,"prev_page":null,"total_pages":2,"total_count":3,"per_page":100}}'
+    http_version: '1.1'
+  recorded_at: Wed, 01 Jan 2020 00:00:00 GMT
+- request:
+    method: get
+    uri: https://thirdparty.qonto.com/v2/transactions?current_page=2&iban=FR7611111222223333333333391&per_page=100
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers: {}
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+    body:
+      encoding: UTF-8
+      string: '{"transactions":[{"id":"q3","transaction_id":"tx-3"}],"meta":{"current_page":2,"next_page":null,"prev_page":1,"total_pages":2,"total_count":3,"per_page":100}}'
+    http_version: '1.1'
+  recorded_at: Wed, 01 Jan 2020 00:00:00 GMT
+recorded_with: VCR 6.0.0

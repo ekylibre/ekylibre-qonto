@@ -1,11 +1,13 @@
 eng:
-  actions: 
+  actions:
     backend/rides:
       index: "Geolocated Rides"
       show: "Geolocated Ride: %{number}"
     backend/ride_sets:
       index: "Geolocated Rides"
       show: "Geolocated Ride: %{number}"
+    qonto/inbound_invoices:
+      index: "E-invoice inbox"
   labels:
     create_from_planned_intervention: "Create from planned intervention"
     samsys_incoming_data_exchange: "Equipments, sensors and geolocated rides"
@@ -43,3 +45,20 @@ To synchronize your geolocated trips with your connected sensors, please configu
     ride_set_to_ride_information: "Click on a geolocated ride to view it on a map, then select its different sections to convert it into an intervention"
     road: "Total distance in km"
     to_convert: "To convert"
+    qonto_inbound_invoices: "E-invoice inbox"
+    einvoice_status_to_review: "To review"
+    einvoice_status_matched: "Reconciled"
+    einvoice_status_ignored: "Ignored"
+    einvoicing_inbox_empty: "No e-invoice in this tab."
+    unknown_supplier: "Unknown supplier"
+    create_the_purchase: "Create the purchase"
+    view_the_purchase: "View the purchase"
+    einvoice_ignored: "E-invoice moved to ignored."
+    new_einvoices_received: "%{count} new e-invoice(s) received."
+    identify_supplier_before_creating_purchase: "Identify the supplier before creating the purchase."
+    purchase_created_from_einvoice: "Draft purchase created from the e-invoice. Complete the lines."
+    could_not_create_purchase: "Could not create the purchase: %{message}"
+    associate: "Associate"
+    associate_a_supplier: "Associate a supplier…"
+    supplier_attached: "Supplier attached to the e-invoice."
+    select_a_supplier: "Please select a supplier."

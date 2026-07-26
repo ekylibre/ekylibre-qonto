@@ -1,5 +1,25 @@
 fra:
+  actions:
+    qonto/inbound_invoices:
+      index: "Boîte de réception des e-factures"
   labels:
+    qonto_inbound_invoices: "Boîte de réception des e-factures"
+    einvoice_status_to_review: "À traiter"
+    einvoice_status_matched: "Rapprochées"
+    einvoice_status_ignored: "Ignorées"
+    einvoicing_inbox_empty: "Aucune e-facture dans cet onglet."
+    unknown_supplier: "Fournisseur inconnu"
+    create_the_purchase: "Créer l'achat"
+    view_the_purchase: "Voir l'achat"
+    einvoice_ignored: "E-facture déplacée dans les ignorées."
+    new_einvoices_received: "%{count} nouvelle(s) e-facture(s) reçue(s)."
+    identify_supplier_before_creating_purchase: "Identifiez le fournisseur avant de créer l'achat."
+    purchase_created_from_einvoice: "Achat brouillon créé depuis l'e-facture. Complétez les lignes."
+    could_not_create_purchase: "Impossible de créer l'achat : %{message}"
+    associate: "Associer"
+    associate_a_supplier: "Associer un fournisseur…"
+    supplier_attached: "Fournisseur associé à l'e-facture."
+    select_a_supplier: "Veuillez sélectionner un fournisseur."
     qonto_incoming_data_exchange: "Relevés de comptes, factures et pièce justificatives"
     qonto_outgoing_data_exchange: "Demande de paiement"
     qonto_short_description: Banque en ligne pro

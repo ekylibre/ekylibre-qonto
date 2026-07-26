@@ -51,18 +51,27 @@ module Qonto
     end
 
     def call
-      BankStatementItem.of_provider_name(PROVIDER_VENDOR, PROVIDER_NAME).each do |bsi|
-        if bsi.provider[:data]["attachment_ids"].any?
-          bsi.provider[:data]["attachment_ids"].each do |id|
-            attachment = get_attachment(id)
-            link_document(bsi, attachment)
-          end
+      bank_statement_items.each do |bsi|
+        Array(bsi.provider_data[:attachment_ids]).each do |id|
+          attachment = get_attachment(id)
+          next if attachment.nil?
+
+          link_document(bsi, attachment)
         end
       end
     end
 
     private
       attr_reader :cash
+
+      # Only the qonto items of THIS cash, instead of every qonto item of the
+      # tenant (which made each sync grow unbounded and re-scan foreign cashes).
+      def bank_statement_items
+        BankStatementItem
+          .of_provider_name(PROVIDER_VENDOR, PROVIDER_NAME)
+          .joins(:bank_statement)
+          .where(bank_statements: { cash_id: cash.id })
+      end
 
       def get_attachment(id)
         Qonto::QontoIntegration.show_attachment(id).execute do |c|
