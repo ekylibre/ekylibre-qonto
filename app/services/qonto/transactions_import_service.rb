@@ -89,9 +89,18 @@ module Qonto
         bank_statement = BankStatement.find_by(cash: cash, number: number, started_on: beginning_of_month, stopped_on: end_of_month)
         return bank_statement if bank_statement.present?
 
-        if bank_statement_can_be_created?(beginning_of_month)
-          BankStatement.create!(cash: cash, number: number, started_on: beginning_of_month, stopped_on: end_of_month)
+        return unless bank_statement_can_be_created?(beginning_of_month)
+
+        # The bank statement bookkeeps on stopped_on: skip the month when no
+        # financial year covers it, otherwise the journal entry is invalid and
+        # raises ActiveRecord::RecordInvalid. It can be re-imported once the
+        # matching financial year exists.
+        unless financial_year_on?(end_of_month)
+          Rails.logger.warn "[Qonto] Bank statement #{number} for cash ##{cash.id} skipped: no financial year covers #{end_of_month}."
+          return
         end
+
+        BankStatement.create!(cash: cash, number: number, started_on: beginning_of_month, stopped_on: end_of_month)
       end
 
       def bank_statement_can_be_created?(beginning_of_month)
@@ -107,7 +116,21 @@ module Qonto
       def create_bank_statement_item(bank_statement, item)
         raise MissingTransactionIdError.new if item.id.blank?
 
+        # The item bookkeeps on transfered_on (settled_at): skip the transaction
+        # when no financial year covers that date, otherwise the journal entry is
+        # invalid and raises ActiveRecord::RecordInvalid. It will be re-imported
+        # once the matching financial year exists.
+        transfered_on = item.settled_at.to_date
+        unless financial_year_on?(transfered_on)
+          Rails.logger.warn "[Qonto] Transaction #{item.id} skipped: no financial year covers #{transfered_on}."
+          return
+        end
+
         bank_statement.items.create!(attributes(item))
+      end
+
+      def financial_year_on?(date)
+        FinancialYear.on(date).present?
       end
 
       def attributes(item)
