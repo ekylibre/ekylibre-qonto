@@ -9,7 +9,7 @@ module Qonto
       @stalled = OutboundInvoice.stalled.count
       # failed first, then in-progress oldest, then the rest.
       @outbound_invoices = OutboundInvoice.includes(:sale).order(
-        Arel.sql("CASE status WHEN 'failed' THEN 0 WHEN 'submitted' THEN 1 WHEN 'issued' THEN 2 ELSE 3 END"),
+        Arel.sql("CASE status WHEN 'failed' THEN 0 WHEN 'submitting' THEN 1 WHEN 'submitted' THEN 1 WHEN 'issued' THEN 2 ELSE 3 END"),
         submitted_at: :asc
       )
     end
@@ -31,6 +31,14 @@ module Qonto
 
       unless sale.invoice?
         notify_warning(:only_invoices_can_be_sent_by_einvoice.tl)
+        return redirect_to backend_sale_path(sale)
+      end
+
+      # The button is hidden once sent, but a double click or a stale page still
+      # posts: refuse here too, only a failed (or abandoned) sending can be retried.
+      outbound = Qonto::OutboundInvoice.find_by(sale: sale)
+      if outbound && !outbound.claimable?
+        notify_warning((outbound.in_progress? ? :einvoice_already_in_progress : :einvoice_already_sent).tl)
         return redirect_to backend_sale_path(sale)
       end
 

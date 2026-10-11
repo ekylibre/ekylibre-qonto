@@ -6,6 +6,11 @@ module Qonto
   # reference, invoice date, currency, attached PDF), and links the two so the
   # inbox never produces a silent duplicate.
   #
+  # Supplier invoices and expense reports end up in the same model but not the
+  # same nature: expense reports get their own PurchaseNature, created on first
+  # use from the default one (same journal). Card receipts and other documents
+  # are not purchases at all — see Qonto::AttachToBankStatement.
+  #
   # Structured lines are materialised as PurchaseItems only when the tenant has
   # opted in by configuring a fallback variant
   # (Preference[:qonto_default_purchase_variant_id]) — an e-invoice carries no
@@ -16,39 +21,93 @@ module Qonto
 
     class Error < StandardError; end
 
-    def self.call(inbound)
-      new(inbound).call
+    # The same invoice number is already a purchase. Carries what was found so
+    # the caller can offer to link it instead.
+    class DuplicateError < Error
+      attr_reader :match
+
+      def initialize(match)
+        @match = match
+        super("a purchase with this reference already exists (#{match.purchase.number})")
+      end
     end
 
-    def initialize(inbound)
+    # @param force [Boolean] create even though a purchase with the same
+    #   reference exists (the accountant confirmed it is another invoice)
+    def self.call(inbound, force: false)
+      new(inbound, force: force).call
+    end
+
+    def initialize(inbound, force: false)
       @inbound = inbound
+      @force = force
     end
 
     # @return [PurchaseInvoice]
     # @raise [Error] when the invoice cannot be turned into a purchase yet
+    # @raise [DuplicateError] when it already exists as a purchase
     def call
-      raise Error, 'supplier not identified' unless @inbound.entity
-      return @inbound.purchase if @inbound.purchase # idempotent
+      # Under a row lock: two clicks (or two users) at once must end with one
+      # purchase, the second finding the first's.
+      @inbound.with_lock do
+        return @inbound.purchase if @inbound.purchase # idempotent
 
-      nature = PurchaseNature.by_default || PurchaseNature.first
-      raise Error, 'no purchase nature configured' unless nature
+        raise Error, 'this document is not a purchase' unless @inbound.purchasable?
+        raise Error, 'credit notes are not supported yet' if credit_note?
+        raise Error, 'this invoice was issued by your own company' if Qonto::OwnCompany.current.issued?(@inbound)
+        raise Error, 'supplier not identified' unless @inbound.entity
 
-      ApplicationRecord.transaction do
-        purchase = PurchaseInvoice.create!(
-          nature: nature,
-          supplier: @inbound.entity,
-          reference_number: @inbound.invoice_number,
-          invoiced_at: writeable_invoiced_at,
-          currency: @inbound.currency.presence || nature.currency
-        )
-        build_items(purchase)
-        attach_document(purchase)
-        @inbound.update!(status: 'matched', purchase: purchase)
-        purchase
+        unless @force
+          duplicate = Qonto::PurchaseDuplicates.for(@inbound)
+          raise DuplicateError, duplicate if duplicate
+        end
+
+        nature = @inbound.expense? ? expense_nature : default_nature
+        raise Error, 'no purchase nature configured' unless nature
+
+        create_purchase(nature)
       end
     end
 
     private
+
+      def create_purchase(nature)
+        ApplicationRecord.transaction do
+          purchase = PurchaseInvoice.create!(
+            nature: nature,
+            supplier: @inbound.entity,
+            reference_number: @inbound.invoice_number,
+            invoiced_at: writeable_invoiced_at,
+            currency: @inbound.currency.presence || nature.currency
+          )
+          build_items(purchase)
+          attach_document(purchase)
+          @inbound.update!(status: 'matched', purchase: purchase)
+          purchase
+        end
+      end
+
+      def default_nature
+        PurchaseNature.by_default || PurchaseNature.first
+      end
+
+      # The nature is found by its name, in either supported language, so a
+      # tenant that switched locale does not get a second one.
+      def expense_nature
+        names = %i[eng fra].map { |locale| I18n.t('labels.expense_report_nature', locale: locale, default: '') }.reject(&:blank?)
+        PurchaseNature.where(name: names).first || create_expense_nature
+      end
+
+      def create_expense_nature
+        base = default_nature
+        return nil unless base
+
+        PurchaseNature.create!(name: :expense_report_nature.tl, journal: base.journal, active: true, by_default: false)
+      end
+
+      def credit_note?
+        @inbound.payload.to_h.deep_stringify_keys['is_credit_note'] == true
+      end
 
       # Pre-maps the structured lines onto a placeholder variant. quantity,
       # unit price and tax come from the invoice; account/amounts are derived by

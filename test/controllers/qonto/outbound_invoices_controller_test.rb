@@ -47,6 +47,61 @@ module Qonto
       assert_includes json['html'], 'einvoicing-timeline'
     end
 
+    test '#create refuses to send again an invoice being sent and enqueues nothing' do
+      sale = sales(:sales_001)
+      complete_mentions!(sale)
+      Qonto::OutboundInvoice.create!(sale: sale, status: 'submitting')
+
+      called = false
+      Qonto::SendEInvoiceJob.stub(:perform_later, ->(**) { called = true }) do
+        post :create, params: { sale_id: sale.id }
+      end
+
+      refute called, 'a double click must not queue a second sending'
+      assert_equal 1, flash.keep(:notifications)['warning'].count
+      assert_redirected_to backend_sale_path(sale)
+    end
+
+    test '#create refuses an invoice already sent, whatever its progress' do
+      sale = sales(:sales_001)
+      complete_mentions!(sale)
+      outbound = Qonto::OutboundInvoice.create!(sale: sale, remote_id: 'sent-1', status: 'submitted')
+
+      %w[submitted issued received].each do |status|
+        outbound.update!(status: status)
+        called = false
+        Qonto::SendEInvoiceJob.stub(:perform_later, ->(**) { called = true }) { post :create, params: { sale_id: sale.id } }
+        refute called, status
+      end
+    end
+
+    test '#create lets a failed sending be retried' do
+      sale = sales(:sales_001)
+      complete_mentions!(sale)
+      Qonto::OutboundInvoice.create!(sale: sale, status: 'failed', remote_id: 'draft-1')
+
+      captured = nil
+      Qonto::SendEInvoiceJob.stub(:perform_later, ->(**kw) { captured = kw }) do
+        post :create, params: { sale_id: sale.id }
+      end
+
+      assert_equal({ sale_id: sale.id }, captured)
+    end
+
+    test '#create lets a sending abandoned by a dead worker be retried' do
+      sale = sales(:sales_001)
+      complete_mentions!(sale)
+      stuck = Qonto::OutboundInvoice.create!(sale: sale, status: 'submitting')
+      stuck.update_columns(updated_at: (Qonto::OutboundInvoice::SUBMITTING_STALE_AFTER + 1.minute).ago)
+
+      captured = nil
+      Qonto::SendEInvoiceJob.stub(:perform_later, ->(**kw) { captured = kw }) do
+        post :create, params: { sale_id: sale.id }
+      end
+
+      assert_equal({ sale_id: sale.id }, captured)
+    end
+
     test '#create warns for a non-invoice sale and enqueues nothing' do
       sale = sales(:sales_002)
       refute sale.invoice?

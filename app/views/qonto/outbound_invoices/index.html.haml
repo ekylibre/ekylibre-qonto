@@ -1,4 +1,4 @@
-- main_informations do
+= main_informations do
   - if @stalled.positive?
     .alert.alert-warning= :einvoices_stalled_warning.tl(count: @stalled)
   - if @outbound_invoices.empty?

@@ -18,6 +18,8 @@ Rails.application.routes.draw do
       member do
         post :ignore
         post :create_purchase
+        post :link_purchase
+        post :attach_to_statement
         post :attach_supplier
       end
     end
