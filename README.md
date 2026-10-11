@@ -12,6 +12,16 @@ invoicing — through the [Qonto Business API v2](https://api-doc.qonto.com/docs
   `EInvoicing::Gateway` decoupled from Qonto (see below), so a change of
   *Plateforme Agréée* stays an adapter swap. Qonto is one implementation.
 
+- **Expenses to justify** (`/qonto/expenses`) — for each unreconciled debit
+  line, suggests the purchase behind it: the supplier document Qonto matched,
+  an unpaid purchase already entered, or the supplier and shape learned from
+  past payments. Documents (Qonto attachments, received invoices) are read
+  locally (PyMuPDF, tesseract for scans) to complete date, number, SIRET and
+  VAT split. Nothing is created without the accountant validating the core
+  "new purchase" form. Needs `python3` and `pymupdf` in the app image (added
+  to the Dockerfiles); without them the suggestions still work, minus the
+  document reading. Design: `docs/design-expense-to-purchase.md`.
+
 ## Configuration
 
 Configure the Qonto integration for the tenant with your API key credentials:

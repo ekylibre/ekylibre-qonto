@@ -1,6 +1,6 @@
 # Conception : des dépenses Qonto aux achats Ekylibre
 
-Statut : phases 0 à 3 implémentées (2026-10-11). La phase 3 lit les justificatifs déjà reçus (§8) ; la lecture des pièces jointes des transactions reste à brancher.
+Statut : phases 0 à 3 implémentées (2026-10-11). Phase 3 : lecture locale des justificatifs reçus et des pièces jointes des lignes (§8, §13). Reste hors périmètre : rejeu de l'historique, table de règles (§12), interface pour la variante d'article par défaut.
 
 ## 1. Constat qui oriente la conception
 Sur 1 122 dépenses Qonto, 96 ne sont pas rapprochées (90 en 2026). Pour ces 96 :
@@ -184,4 +184,6 @@ non résolu, au seuil de 75 % d'accord). À créer si ce besoin apparaît.
 - `ExpenseSuggester` (facture reçue) : date et numéro manquants repris du justificatif ; fournisseur par SIRET s'il est unique ; une ligne par taux de TVA si la ventilation imprimée égale le montant payé (avant l'échelle du dernier achat) ; avertissement `receipt_amount_mismatch` si aucun total lu ne correspond.
 - Mesure sur 72 justificatifs réels : texte lisible 68, OCR 4 ; le montant payé figure parmi les totaux lus pour 56 sur 72 (les autres n'impriment que HT et TVA) ; SIRET 45, date 60, ventilation de TVA 22 (21 cohérentes).
 - Pièces jointes des transactions : le bouton « Récupérer le justificatif » (lecture seule chez Qonto) télécharge les fichiers d une ligne ; le suggéreur lit le fichier attaché à la ligne et la finalisation le joint à l achat.
-- Prérequis d'installation : `pip install pymupdf` dans l'image de l'application (pour l'instant dans le compte du conteneur seulement).
+- Prérequis : `pymupdf` est installé par `docker/dev/Dockerfile` et `docker/prod/Dockerfile` du cœur (images non reconstruites lors de l'écriture).
+- Mesure finale sur `admin` (96 lignes à justifier) : 62 suggestions créables avec fournisseur (53 par historique, 9 par facture Qonto), dont 7 aidées par un fichier attaché à la ligne ; 34 sans suggestion.
+- Limites connues : les lignes d'achat n'ont pas de variante sans la préférence `qonto_default_purchase_variant_id` (pas d'interface) ou un modèle d'achat ; les totaux des factures qui n'impriment que HT et TVA ne sont pas confirmés ; le bouton « Récupérer le justificatif » n'agit que sur des pièces connues après synchronisation.
