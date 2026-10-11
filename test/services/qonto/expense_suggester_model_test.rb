@@ -111,7 +111,67 @@ class Qonto::ExpenseSuggesterModelTest < ::Ekylibre::Testing::ApplicationTestCas
     assert_nil suggestion.items.first[:variant_id] unless Qonto::PurchaseDefaults.default_variant
   end
 
+  def test_the_vat_split_printed_on_the_document_gives_one_line_per_rate
+    lettered_purchase(cash: @cash, mode: @mode, supplier: @supplier, label: 'INTERMARCHE')
+    item = unmatched_item(cash: @cash, label: 'INTERMARCHE', debit: 17.23, provider_id: 'tx-im')
+    inbound = Qonto::InboundInvoice.create!(remote_id: 'r-im', kind: 'expense', entity: @supplier, amount: 17.23, currency: 'EUR',
+                                            payload: { matched_transactions: [{ subject_type: 'transaction', transaction_id: 'tx-im' }] })
+
+    suggestion = with_receipt(inbound, receipt(date: '2026-09-14', number: 'T-77', vat_lines: [
+      { rate: BigDecimal('5.5'), pretax: BigDecimal('7.80'), vat: BigDecimal('0.43'), total: BigDecimal('8.23') },
+      { rate: BigDecimal('20'), pretax: BigDecimal('7.50'), vat: BigDecimal('1.50'), total: BigDecimal('9.00') }
+    ])) { suggest(item) }
+
+    assert_equal 2, suggestion.items.size
+    assert_equal BigDecimal('17.23'), suggestion.items_total
+    assert_equal :receipt, suggestion.provenance[:items]
+    assert_equal 'T-77', suggestion.reference_number
+    assert_equal :receipt, suggestion.provenance[:reference_number]
+    assert_equal ProductNatureVariant.first.id, suggestion.items.first[:variant_id], 'the supplier\'s usual article is kept'
+    assert_not_includes suggestion.warnings, :receipt_amount_mismatch
+  end
+
+  def test_a_document_that_does_not_show_the_amount_paid_is_flagged
+    item = unmatched_item(cash: @cash, label: 'INTERMARCHE', debit: 17.23, provider_id: 'tx-im')
+    inbound = Qonto::InboundInvoice.create!(remote_id: 'r-im', kind: 'invoice', entity: @supplier, amount: 17.23, currency: 'EUR',
+                                            payload: { matched_transactions: [{ subject_type: 'transaction', transaction_id: 'tx-im' }] })
+
+    suggestion = with_receipt(inbound, receipt(total_candidates: [BigDecimal('99.90')])) { suggest(item) }
+
+    assert_includes suggestion.warnings, :receipt_amount_mismatch
+  end
+
+  def test_the_siret_printed_on_the_document_names_the_supplier_when_nothing_else_does
+    @supplier.update_columns(siret_number: '12345678200019')
+    item = unmatched_item(cash: @cash, label: 'UNKNOWN 9', debit: 17.23, provider_id: 'tx-im')
+    inbound = Qonto::InboundInvoice.create!(remote_id: 'r-im', kind: 'invoice', entity: nil, amount: 17.23, currency: 'EUR',
+                                            payload: { matched_transactions: [{ subject_type: 'transaction', transaction_id: 'tx-im' }] })
+
+    suggestion = with_receipt(inbound, receipt(siret: '12345678200019')) { suggest(item) }
+
+    assert_equal @supplier, suggestion.supplier
+    assert_equal :receipt, suggestion.supplier_how
+    assert_equal :receipt, suggestion.provenance[:supplier]
+  end
+
   private
+
+    def receipt(**attrs)
+      Qonto::ReceiptReader::Result.new(
+        { method: 'text', total: nil, total_candidates: [BigDecimal('17.23')], date: nil, number: nil, siret: nil, vat_number: nil,
+          vat_lines: [], vat_consistent: !attrs[:vat_lines].to_a.empty? }.merge(attrs)
+      )
+    end
+
+    # The reader needs a stored document: stand in for it.
+    def with_receipt(_inbound, result)
+      original = Qonto::ReceiptReader.method(:read)
+      Qonto::ReceiptReader.define_singleton_method(:read) { |_document| result }
+      Qonto::InboundInvoice.any_instance.stubs(:document).returns(Document.new) if Qonto::InboundInvoice.respond_to?(:any_instance)
+      yield
+    ensure
+      Qonto::ReceiptReader.define_singleton_method(:read, original)
+    end
 
     def suggest(item)
       Qonto::ExpenseSuggester.for_all([item])[item.id]

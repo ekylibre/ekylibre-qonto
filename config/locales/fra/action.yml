@@ -135,5 +135,7 @@ fra:
     expense_how_learned_label: "même libellé déjà payé"
     expense_how_learned_iban: "même compte déjà payé"
     expense_how_iban: "IBAN du tiers"
+    expense_warning_receipt_amount_mismatch: "Total du justificatif différent de la ligne bancaire"
+    expense_how_receipt: "lu sur le justificatif"
     expense_how_name: "même nom"
     expense_model_from: "d'après l'achat %{number}"

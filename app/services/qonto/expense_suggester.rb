@@ -64,7 +64,9 @@ module Qonto
         warnings = []
         warnings << :own_company if @own_company.issued?(inbound)
         warnings << :credit_note if credit_note?(inbound)
+        receipt = Qonto::ReceiptReader.read(inbound.document)
         supplier, supplier_how = inbound.entity ? [inbound.entity, :inbound] : resolved_supplier(item)
+        supplier, supplier_how = [receipt_supplier(receipt), :receipt] if supplier.nil? && receipt_supplier(receipt)
         warnings << :no_supplier unless supplier
         nature = nature_for(inbound)
         warnings << :no_nature unless nature
@@ -79,16 +81,58 @@ module Qonto
         # A document without lines says nothing of what was bought: the supplier's
         # previous purchase does.
         model = inbound.line_items.empty? && supplier ? model_for(supplier, item) : nil
-        items = model ? model.items : items_for(inbound, item.debit.to_d)
+        # What the document itself says of the VAT beats scaling an older purchase.
+        split = inbound.line_items.empty? ? receipt&.vat_split_for(item.debit.to_d).to_a : []
+        items = if split.any?
+                  receipt_items(split, model)
+                elsif model
+                  model.items
+                else
+                  items_for(inbound, item.debit.to_d)
+                end
+        warnings << :receipt_amount_mismatch if receipt && receipt.total_candidates.any? && !receipt.total_matches?(item.debit)
         suggestion = ExpenseSuggestion.new(
           item: item, source: :inbound_invoice, confidence: confidence_for(inbound, warnings),
-          supplier: supplier, supplier_how: supplier_how, nature_id: nature&.id, invoiced_at: invoiced_at(inbound, item),
-          reference_number: inbound.invoice_number, description: inbound.supplier_name, items: items,
+          supplier: supplier, supplier_how: supplier_how, nature_id: nature&.id, invoiced_at: invoiced_at(inbound, item, receipt),
+          reference_number: inbound.invoice_number.presence || receipt&.number, description: inbound.supplier_name, items: items,
           document: inbound.document, inbound: inbound, warnings: warnings, model_purchase: model&.purchase,
-          provenance: provenance_for(inbound).merge(model ? { items: :history } : {}).merge(supplier_how == :inbound || supplier.nil? ? {} : { supplier: :history })
+          provenance: provenance_for(inbound).merge(model ? { items: :history } : {}).merge(supplier_how.in?([:inbound, :receipt]) || supplier.nil? ? {} : { supplier: :history })
+                                             .merge(receipt_provenance(inbound, receipt, supplier_how, split))
         )
         suggestion.warnings << :amount_mismatch unless suggestion.balanced?
         suggestion
+      end
+
+      # The supplier named by the SIRET printed on the document, when exactly one
+      # entity carries it.
+      def receipt_supplier(receipt)
+        return nil if receipt&.siret.blank?
+
+        found = Entity.where(siret_number: receipt.siret).limit(2).to_a
+        found.one? ? found.first : nil
+      end
+
+      # One line per VAT rate, as printed. The variant and unit come from the
+      # supplier's previous purchase when there is one.
+      def receipt_items(split, model)
+        base = model&.items&.first.to_h
+        variant = base[:variant_id] ? nil : Qonto::PurchaseDefaults.default_variant
+        split.map do |line|
+          tax = Qonto::PurchaseDefaults.tax_for(line[:rate])
+          { variant_id: base[:variant_id] || variant&.id, conditioning_unit_id: base[:conditioning_unit_id] || variant&.default_unit&.id,
+            conditioning_quantity: 1, tax_id: tax&.id, unit_pretax_amount: line[:pretax], amount: line[:total] }
+        end
+      end
+
+      def receipt_provenance(inbound, receipt, supplier_how, split)
+        return {} unless receipt
+
+        found = {}
+        found[:supplier] = :receipt if supplier_how == :receipt
+        found[:invoiced_at] = :receipt if inbound.issued_on.nil? && receipt.date
+        found[:reference_number] = :receipt if inbound.invoice_number.blank? && receipt.number
+        found[:items] = :receipt if split.any?
+        found
       end
 
       def credit_note?(inbound)
@@ -112,8 +156,8 @@ module Qonto
 
       # The supplier's date when an exercise is open on it, else the day the
       # money left: the form would refuse a closed period.
-      def invoiced_at(inbound, item)
-        [inbound.issued_on, item.transfered_on].compact.find { |date| FinancialYear.on(date)&.opened? } || item.transfered_on
+      def invoiced_at(inbound, item, receipt = nil)
+        [inbound.issued_on || receipt&.date_on, item.transfered_on].compact.find { |date| FinancialYear.on(date)&.opened? } || item.transfered_on
       end
 
       # Structured lines when the document has them, otherwise one line at the

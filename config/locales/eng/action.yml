@@ -167,5 +167,7 @@ To synchronize your geolocated trips with your connected sensors, please configu
     expense_how_learned_label: "same label paid before"
     expense_how_learned_iban: "same account paid before"
     expense_how_iban: "entity bank account"
+    expense_warning_receipt_amount_mismatch: "The document's total differs from the bank line"
+    expense_how_receipt: "read on the document"
     expense_how_name: "same name"
     expense_model_from: "from purchase %{number}"

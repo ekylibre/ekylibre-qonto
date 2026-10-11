@@ -1,6 +1,6 @@
 # Conception : des dépenses Qonto aux achats Ekylibre
 
-Statut : phases 0, 1 et 2 implémentées (2026-10-11) ; phase 3 (lecture des justificatifs) à faire. Fait suite à la mesure du 2026-10-11 sur le tenant `admin`.
+Statut : phases 0 à 3 implémentées (2026-10-11). La phase 3 lit les justificatifs déjà reçus (§8) ; la lecture des pièces jointes des transactions reste à brancher.
 
 ## 1. Constat qui oriente la conception
 Sur 1 122 dépenses Qonto, 96 ne sont pas rapprochées (90 en 2026). Pour ces 96 :
@@ -177,3 +177,11 @@ rapprochements (libellé ou IBAN vers tiers, tiers vers dernier achat) joue déj
 entretenir, et il s'améliore à chaque validation. Une table ne se justifierait que pour corriger un cas où l'historique
 se trompe de façon persistante (par exemple un libellé payé tantôt à un tiers, tantôt à un autre : il est alors laissé
 non résolu, au seuil de 75 % d'accord). À créer si ce besoin apparaît.
+
+## 13. Phase 3 : ce qui est fait
+- `lib/ekylibre-qonto/read_receipt.py` : texte du PDF par PyMuPDF, tesseract (fra+eng, déjà dans l'image) si la page n'a pas de texte. Rend total et montants à côté d'un libellé « total », date, numéro, SIRET, TVA intracommunautaire, ventilation par taux (« taux HT TVA TTC »).
+- `Qonto::ReceiptReader` : sous-processus `python3` depuis un répertoire neutre, délai de 90 s, résultat en cache 30 jours par document. Sans Python ou PyMuPDF, rend `nil` : rien ne casse.
+- `ExpenseSuggester` (facture reçue) : date et numéro manquants repris du justificatif ; fournisseur par SIRET s'il est unique ; une ligne par taux de TVA si la ventilation imprimée égale le montant payé (avant l'échelle du dernier achat) ; avertissement `receipt_amount_mismatch` si aucun total lu ne correspond.
+- Mesure sur 72 justificatifs réels : texte lisible 68, OCR 4 ; le montant payé figure parmi les totaux lus pour 56 sur 72 (les autres n'impriment que HT et TVA) ; SIRET 45, date 60, ventilation de TVA 22 (21 cohérentes).
+- Pas fait : récupérer les pièces jointes des transactions (`attachment_ids`) pour les lignes sans facture reçue. Il faut une action de l'utilisateur (téléchargement) et une resynchronisation préalable.
+- Prérequis d'installation : `pip install pymupdf` dans l'image de l'application (pour l'instant dans le compte du conteneur seulement).
