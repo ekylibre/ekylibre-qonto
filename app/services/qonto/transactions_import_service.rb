@@ -63,9 +63,12 @@ module Qonto
         next if bank_statement.nil?
 
         transaction_items.each do |transaction_item|
-          next if bank_statement_item_already_exists?(transaction_item)
-
-          create_bank_statement_item(bank_statement, transaction_item)
+          existing = existing_bank_statement_item(transaction_item)
+          if existing
+            refresh_provider_data(existing, transaction_item)
+          else
+            create_bank_statement_item(bank_statement, transaction_item)
+          end
         end
 
         recalculate_debit_credit(bank_statement)
@@ -108,14 +111,27 @@ module Qonto
         BankStatement.for_cash(cash).between(beginning_of_month, end_of_month).empty?
       end
 
-      def bank_statement_item_already_exists?(item)
+      def existing_bank_statement_item(item)
         # Idempotence keys, in order of reliability:
         #   - the Qonto provider id (item.id) stored in the provider jsonb;
         #   - the transaction_number column, fed from item.transaction_id.
         # Note: the Qonto payload has no `transaction_number` field (that was a
         # dead check on the struct) — the business key is item.transaction_id.
-        (item.id.present? && BankStatementItem.of_provider(PROVIDER_VENDOR, PROVIDER_NAME, item.id).any?) ||
-          (item.transaction_id.present? && BankStatementItem.exists?(transaction_number: item.transaction_id))
+        (item.id.present? && BankStatementItem.of_provider(PROVIDER_VENDOR, PROVIDER_NAME, item.id).first) ||
+          (item.transaction_id.present? && BankStatementItem.find_by(transaction_number: item.transaction_id))
+      end
+
+      # An item imported before the provider data was enriched learns the new
+      # fields, without touching what the accountant works with (amounts,
+      # lettering, bookkeeping): only the jsonb is written, callbacks skipped.
+      def refresh_provider_data(bank_statement_item, item)
+        provider = (bank_statement_item.provider || {}).to_h
+        key = provider.key?('data') ? 'data' : :data
+        current = (provider[key] || {}).to_h.stringify_keys
+        fresh = current.merge(provider_data(item).stringify_keys)
+        return if fresh == current
+
+        bank_statement_item.update_column(:provider, provider.merge(key => fresh))
       end
 
       def create_bank_statement_item(bank_statement, item)
@@ -152,14 +168,58 @@ module Qonto
               vendor: PROVIDER_VENDOR,
               name: PROVIDER_NAME,
               id: item.id,
-              data:  {
-                operation_type: item.operation_type,
-                category: item.category,
-                subject_type: item.subject_type,
-                attachment_ids: item.attachment_ids
-              }
+              data: provider_data(item)
             }
         }
+      end
+
+      # What the accountant needs to recognise the other party and the VAT
+      # without calling Qonto again. Absent values are left out.
+      def provider_data(item)
+        counterparty = counterparty_of(item)
+        {
+          operation_type: item.operation_type,
+          category: item.category,
+          subject_type: item.subject_type,
+          attachment_ids: item.attachment_ids,
+          counterparty_name: field(item, :clean_counterparty_name),
+          counterparty_iban: counterparty && field(counterparty, :counterparty_account_number),
+          counterparty_bic: counterparty && field(counterparty, :counterparty_bank_identifier),
+          mandate_reference: counterparty && field(counterparty, :unique_mandate_reference),
+          vat_amount: field(item, :vat_amount),
+          vat_rate: field(item, :vat_rate),
+          vat_details: vat_details_of(item),
+          cashflow_category: name_of(field(item, :cashflow_category)),
+          cashflow_subcategory: name_of(field(item, :cashflow_subcategory)),
+          note: field(item, :note).presence,
+          card_last_digits: field(item, :card_last_digits),
+          status: field(item, :status)
+        }.compact
+      end
+
+      # The block that carries the other party's bank details depends on the
+      # operation: transfer, income or direct_debit.
+      def counterparty_of(item)
+        %i[transfer income direct_debit].map { |k| field(item, k) }.find(&:present?)
+      end
+
+      def vat_details_of(item)
+        entries = field(field(item, :vat_details), :items)
+        Array(entries).map do |e|
+          { rate: field(e, :rate), amount: field(e, :amount), amount_excluding_vat: field(e, :amount_excluding_vat) }
+        end.presence
+      end
+
+      def name_of(value)
+        value.nil? ? nil : field(value, :name)
+      end
+
+      # Transactions come as structs, hashes or OpenStructs depending on the caller.
+      def field(object, name)
+        return nil if object.nil?
+        return object[name] || object[name.to_s] if object.is_a?(Hash)
+
+        object.respond_to?(name) ? object.public_send(name) : nil
       end
 
       def compute_balance(item)

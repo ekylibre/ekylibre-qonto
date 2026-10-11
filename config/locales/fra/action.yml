@@ -2,6 +2,8 @@ fra:
   actions:
     qonto/inbound_invoices:
       index: "E-factures (reception)"
+    qonto/expenses:
+      index: "Dépenses à justifier"
     qonto/outbound_invoices:
       index: "E-factures (envoie)"
   labels:
@@ -102,3 +104,29 @@ fra:
     iban_should_be_provided: "Pour synchroniser les relevés, l'IBAN du compte doit être renseigné."
     cash_transactions_synchronizing: "La synchronisation des relevés de compte bancaire est en cours. Une notification vous sera envoyée dès qu'elle sera terminée."
     cash_transactions_synchronized: "Les relevés de compte bancaire ont bien été synchronisés."
+    qonto_expenses: "Dépenses à justifier"
+    expense_status_to_justify: "À justifier"
+    expense_status_ignored: "Ignorées"
+    expenses_empty: "Aucune dépense dans cet onglet."
+    expense_col_date: "Date"
+    expense_col_line: "Ligne bancaire"
+    expense_col_suggestion: "Suggestion"
+    expense_ignored: "Dépense ignorée."
+    expense_purchase_created: "Achat %{number} créé et rapproché de la ligne bancaire."
+    expense_not_lettered: "La ligne n'est pas encore rapprochée : l'achat n'a pas été enregistré."
+    expense_purchase_not_found: "La ligne est rapprochée mais l'achat n'a pas pu être retrouvé."
+    expense_source_inbound_invoice: "Facture reçue par Qonto"
+    expense_source_existing_purchase: "Achat déjà saisi"
+    expense_source_none: "Aucune suggestion"
+    expense_warning_own_company: "Facture émise par votre société"
+    expense_warning_credit_note: "Avoir"
+    expense_warning_already_entered: "Déjà saisie, non payée"
+    expense_warning_amount_mismatch: "Le total ne correspond pas à la ligne bancaire"
+    expense_warning_no_supplier: "Fournisseur à choisir"
+    expense_warning_no_nature: "Nature d'achat à choisir"
+    expense_create_purchase: "Créer l'achat"
+    expense_enter_purchase: "Saisir l'achat"
+    expense_restore: "Remettre à traiter"
+    expense_show_all_types: "Afficher aussi les frais bancaires"
+    expense_to_justify_elsewhere: "%{count} autre(s) dépense(s) à justifier sur d’autres exercices."
+    expense_supporting_document: "Justificatif"

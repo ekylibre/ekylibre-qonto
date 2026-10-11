@@ -24,6 +24,14 @@ Rails.application.routes.draw do
       end
     end
 
+    resources :expenses, only: %i[index] do
+      member do
+        post :ignore
+        post :restore
+        get :finalize
+      end
+    end
+
     resources :outbound_invoices, only: %i[index] do
       member { get :status }
     end

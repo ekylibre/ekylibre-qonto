@@ -8,6 +8,12 @@
         <page to="qonto/inbound_invoices#create_purchase"/>
         <page to="qonto/inbound_invoices#attach_supplier"/>
       </item>
+      <item name="qonto_expenses">
+        <page to="qonto/expenses#index"/>
+        <page to="qonto/expenses#ignore"/>
+        <page to="qonto/expenses#restore"/>
+        <page to="qonto/expenses#finalize"/>
+      </item>
     </group>
   </part>
   <part name="sales">

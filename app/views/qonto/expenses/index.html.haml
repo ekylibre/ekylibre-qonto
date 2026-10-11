@@ -1,0 +1,80 @@
+-# The exercise selector of the accountancy dashboard (heading toolbar).
+- main_financial_year_selector(current_financial_year.id) if current_financial_year
+- default_nature = PurchaseNature.by_default || PurchaseNature.first
+= main_informations do
+  :css
+    .qonto-expenses .nav-pills { margin: 12px 0 8px; }
+    .qonto-expenses table.qonto-table { margin-bottom: 0; }
+    .qonto-expenses table.qonto-table > thead > tr > th { border-bottom: 1px solid #c9cfd6; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; color: #6b7480; white-space: nowrap; }
+    .qonto-expenses table.qonto-table > tbody > tr > td { vertical-align: middle; padding: 7px 8px; }
+    .qonto-expenses table.qonto-table > tbody > tr:hover { background: #f4f7fb; }
+    .qonto-expenses .qonto-date { white-space: nowrap; width: 1%; }
+    .qonto-expenses .qonto-amount { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+    .qonto-expenses .qonto-amount small { display: block; color: #8a929c; }
+    .qonto-expenses .qonto-actions { white-space: nowrap; text-align: right; width: 1%; }
+    .qonto-expenses .qonto-sub { display: block; font-size: 11px; color: #8a929c; }
+    .qonto-expenses .qonto-doc-link { margin-left: 6px; font-size: 11px; }
+    .qonto-expenses .qonto-flags .label { margin-right: 4px; }
+
+  .qonto-expenses
+    %ul.nav.nav-pills
+      - Qonto::ExpensesController::STATUSES.each do |status|
+        %li{ class: ('active' if status == @status) }
+          = link_to qonto_expenses_path(status: status, all_types: (1 if @all_types)) do
+            = "expense_status_#{status}".to_sym.tl
+            %span.badge= @counts[status].to_i
+    %p.text-muted{ style: 'font-size: 12px; margin: 0 0 8px' }
+      = link_to (@all_types ? :expense_status_to_justify.tl : :expense_show_all_types.tl), qonto_expenses_path(status: @status, all_types: (@all_types ? nil : 1))
+      - if @elsewhere.to_i.positive?
+        &nbsp;·&nbsp;
+        = :expense_to_justify_elsewhere.tl(count: @elsewhere)
+
+    - if @items.empty?
+      %p.text-muted.text-center{ style: 'padding: 2em' }= :expenses_empty.tl
+    - else
+      %table.table.qonto-table
+        %thead
+          %tr
+            %th= :expense_col_date.tl
+            %th= :expense_col_line.tl
+            %th.qonto-amount= :amount.tl
+            %th= :expense_col_suggestion.tl
+            %th
+        %tbody
+          - @items.each do |item|
+            - suggestion = @suggestions[item.id]
+            - data = (item.provider || {}).to_h.with_indifferent_access[:data].to_h
+            - document = item.attachments.first&.document
+            %tr
+              %td.qonto-date= item.transfered_on.l
+              %td
+                = item.name
+                - if document
+                  = link_to :expense_supporting_document.tl, backend_document_path(document), target: '_blank', class: 'qonto-doc-link'
+                - if data[:counterparty_name].present? && data[:counterparty_name].to_s.casecmp(item.name.to_s) != 0
+                  %span.qonto-sub= data[:counterparty_name]
+              %td.qonto-amount
+                %strong= "#{number_with_precision(item.debit, precision: 2)} #{item.currency}"
+                - if data[:vat_amount].to_f.positive?
+                  %small= "#{number_with_precision(data[:vat_amount], precision: 2)} #{:vat.tl}"
+              %td
+                - if suggestion && !suggestion.none?
+                  = "expense_source_#{suggestion.source}".to_sym.tl
+                  - if suggestion.supplier
+                    %span.qonto-sub= suggestion.supplier.full_name
+                  - if suggestion.reference_number.present?
+                    %span.qonto-sub= suggestion.reference_number
+                  - if suggestion.existing
+                    %span.qonto-sub= link_to suggestion.existing.number, backend_purchase_path(suggestion.existing)
+                  .qonto-flags
+                    - suggestion.warnings.each do |warning|
+                      %span.label{ class: (%i[own_company credit_note already_entered].include?(warning) ? 'label-danger' : 'label-warning') }= "expense_warning_#{warning}".to_sym.tl
+              %td.qonto-actions
+                - if @status == 'ignored'
+                  = link_to :expense_restore.tl, restore_qonto_expense_path(item), method: :post, class: 'btn btn-default btn-xs'
+                - else
+                  - if suggestion&.creatable?
+                    = link_to :expense_create_purchase.tl, new_backend_quick_purchase_path(suggestion.form_params(redirect: finalize_qonto_expense_path(item))), class: 'btn btn-primary btn-xs'
+                  - elsif default_nature && !suggestion&.existing
+                    = link_to :expense_enter_purchase.tl, new_backend_quick_purchase_path(nature_id: default_nature.id, bank_statement_item_ids: [item.id], redirect: finalize_qonto_expense_path(item)), class: 'btn btn-default btn-xs'
+                  = link_to :ignore.tl, ignore_qonto_expense_path(item), method: :post, class: 'btn btn-default btn-xs'
