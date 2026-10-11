@@ -154,6 +154,24 @@ class Qonto::ExpenseSuggesterModelTest < ::Ekylibre::Testing::ApplicationTestCas
     assert_equal :receipt, suggestion.provenance[:supplier]
   end
 
+  def test_a_file_attached_to_the_bank_line_names_the_supplier_by_its_siret
+    @supplier.update_columns(siret_number: '12345678200019')
+    item = unmatched_item(cash: @cash, label: 'NEVER SEEN 8', debit: 17.23)
+    item.attachments.create!(document: Document.create!(key: 'att-x', name: 'x.pdf', processable_attachment: false))
+    result = receipt(siret: '12345678200019', number: 'T-9', vat_lines: [
+      { rate: BigDecimal('20'), pretax: BigDecimal('14.36'), vat: BigDecimal('2.87'), total: BigDecimal('17.23') }
+    ])
+
+    suggestion = with_receipt(nil, result) { suggest(item) }
+
+    assert_equal :supplier_model, suggestion.source
+    assert_equal @supplier, suggestion.supplier
+    assert_equal :receipt, suggestion.supplier_how
+    assert_equal 'T-9', suggestion.reference_number
+    assert_equal BigDecimal('17.23'), suggestion.items_total
+    assert_equal item.attachments.first.document, suggestion.document
+  end
+
   private
 
     def receipt(**attrs)

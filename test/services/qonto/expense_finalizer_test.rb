@@ -61,6 +61,18 @@ class Qonto::ExpenseFinalizerTest < ::Ekylibre::Testing::ApplicationTestCase::Wi
     assert_equal purchase, result.purchase
   end
 
+  def test_the_file_attached_to_the_bank_line_follows_the_purchase
+    purchase = create_lettered_purchase
+    @inbound.destroy!
+    document = Document.create!(key: 'att-line', name: 'line.pdf', processable_attachment: false)
+    @item.attachments.create!(document: document)
+
+    Qonto::ExpenseFinalizer.call(@item.reload)
+    Qonto::ExpenseFinalizer.call(@item.reload)
+
+    assert_equal [document.id], purchase.reload.attachments.map(&:document_id)
+  end
+
   private
 
     # What the reconciliation form does: purchase, payment, affair, lettering.

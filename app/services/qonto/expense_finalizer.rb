@@ -26,7 +26,7 @@ module Qonto
       return Result.new(status: :purchase_not_found) unless purchase
 
       inbound = inbound_for(@item)
-      attach_document(purchase, inbound)
+      attach_documents(purchase, inbound)
       close(inbound, purchase)
       Result.new(status: :done, purchase: purchase)
     end
@@ -50,12 +50,16 @@ module Qonto
         InboundInvoice.where(status: 'to_review').find { |inbound| inbound.matched_transaction_ids.include?(id) }
       end
 
-      def attach_document(purchase, inbound)
-        document = inbound&.document
-        return unless document && purchase.respond_to?(:attachments)
-        return if purchase.attachments.where(document_id: document.id).exists?
+      # The supplier's document and what is attached to the bank line itself.
+      def attach_documents(purchase, inbound)
+        return unless purchase.respond_to?(:attachments)
 
-        purchase.attachments.create!(document: document)
+        documents = [inbound&.document, *@item.attachments.map(&:document)].compact.uniq
+        documents.each do |document|
+          next if purchase.attachments.where(document_id: document.id).exists?
+
+          purchase.attachments.create!(document: document)
+        end
       end
 
       def close(inbound, purchase)

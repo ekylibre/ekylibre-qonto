@@ -28,6 +28,7 @@ Rails.application.routes.draw do
       member do
         post :ignore
         post :restore
+        post :fetch_document
         get :finalize
       end
     end

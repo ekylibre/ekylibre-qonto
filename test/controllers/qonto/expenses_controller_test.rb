@@ -77,6 +77,23 @@ module Qonto
       assert_equal [@card.id], assigns(:items).map(&:id)
     end
 
+    test '#fetch_document warns when the line has no known attachment' do
+      post :fetch_document, params: { id: @card.id }
+
+      assert_redirected_to qonto_expenses_path
+    end
+
+    test '#fetch_document downloads the files of the line, without writing anything to Qonto' do
+      @card.update_column(:provider, @card.provider.to_h.merge('data' => { 'attachment_ids' => ['att-1'] }))
+      called = nil
+      Qonto::DocumentsImportService.stub(:call, ->(**args) { called = args; 1 }) do
+        post :fetch_document, params: { id: @card.id }
+      end
+
+      assert_redirected_to qonto_expenses_path
+      assert_equal [@card.id], called[:items].map(&:id)
+    end
+
     test '#restore puts an ignored line back' do
       post :ignore, params: { id: @card.id }
       post :restore, params: { id: @card.id }

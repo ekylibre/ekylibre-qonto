@@ -39,7 +39,8 @@ module Qonto
     def suggest(item)
       inbound = @inbound_by_transaction[self.class.qonto_id(item)]
       suggestion = from_inbound(item, inbound) if inbound
-      suggestion || existing_purchase(item) || supplier_model(item) || ExpenseSuggestion.new(item: item)
+      suggestion ||= existing_purchase(item) || supplier_model(item) || ExpenseSuggestion.new(item: item)
+      suggestion.source.in?(%i[supplier_model none]) ? with_attached_document(item, suggestion) : suggestion
     end
 
     private
@@ -133,6 +134,44 @@ module Qonto
         found[:reference_number] = :receipt if inbound.invoice_number.blank? && receipt.number
         found[:items] = :receipt if split.any?
         found
+      end
+
+      # The file attached to the bank line itself (Qonto's own attachment on the
+      # transaction) completes what the history guessed, or names the supplier
+      # by its SIRET when the history knew nothing.
+      def with_attached_document(item, base)
+        document = item.attachments.first&.document
+        receipt = Qonto::ReceiptReader.read(document)
+        return base unless receipt
+
+        debit = item.debit.to_d
+        supplier, how = base.supplier ? [base.supplier, base.supplier_how] : [receipt_supplier(receipt), :receipt]
+        return base unless supplier
+
+        model = model_for(supplier, item)
+        split = receipt.vat_split_for(debit)
+        items = if split.any? then receipt_items(split, model)
+                elsif base.items.any? then base.items
+                else model ? model.items : []
+                end
+        warnings = base.warnings.dup
+        warnings.delete(:no_model) if items.any?
+        warnings << :receipt_amount_mismatch if receipt.total_candidates.any? && !receipt.total_matches?(debit)
+        nature = base.nature_id || model&.nature_id || Qonto::PurchaseDefaults.default_nature&.id
+        provenance = base.provenance.merge(supplier: (how == :receipt ? :receipt : :history))
+        provenance[:items] = split.any? ? :receipt : :history if items.any?
+        provenance[:reference_number] = :receipt if receipt.number
+        ExpenseSuggestion.new(
+          item: item, source: :supplier_model, confidence: split.any? && how != :receipt ? :medium : (base.confidence == :medium ? :medium : :low),
+          supplier: supplier, supplier_how: how, nature_id: nature, invoiced_at: receipt_date(receipt, item) || base.invoiced_at || payment_date(item),
+          reference_number: receipt.number, description: base.description || item.name, items: items, document: document,
+          model_purchase: base.model_purchase || model&.purchase, warnings: warnings, provenance: provenance
+        )
+      end
+
+      def receipt_date(receipt, item)
+        date = receipt.date_on
+        date && FinancialYear.on(date)&.opened? ? date : nil
       end
 
       def credit_note?(inbound)

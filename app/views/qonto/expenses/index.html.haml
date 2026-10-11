@@ -51,6 +51,8 @@
                 = item.name
                 - if document
                   = link_to :expense_supporting_document.tl, backend_document_path(document), target: '_blank', class: 'qonto-doc-link'
+                - if !document && Array(data[:attachment_ids]).any?
+                  = link_to :expense_fetch_document.tl, fetch_document_qonto_expense_path(item), method: :post, class: 'qonto-doc-link'
                 - if data[:counterparty_name].present? && data[:counterparty_name].to_s.casecmp(item.name.to_s) != 0
                   %span.qonto-sub= data[:counterparty_name]
               %td.qonto-amount

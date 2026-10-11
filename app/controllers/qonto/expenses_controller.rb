@@ -34,6 +34,25 @@ module Qonto
       redirect_to qonto_expenses_path(status: 'ignored')
     end
 
+    # Downloads, from Qonto, the files attached to this transaction (read only
+    # on Qonto's side). The suggester reads them on the next display.
+    def fetch_document
+      item = find_item
+      ids = Array((item.provider.to_h.with_indifferent_access[:data] || {})[:attachment_ids])
+      if ids.empty?
+        notify_warning(:expense_no_attachment_known.tl)
+      elsif Qonto::DocumentsImportService.call(items: [item]).positive?
+        notify_success(:expense_documents_fetched.tl)
+      else
+        notify_warning(:expense_documents_none_new.tl)
+      end
+      redirect_to qonto_expenses_path
+    rescue StandardError => e
+      Rails.logger.warn("[Qonto][expenses] fetch_document: #{e.class}: #{e.message}")
+      notify_error(:expense_documents_failed.tl)
+      redirect_to qonto_expenses_path
+    end
+
     # Where the purchase form sends back after it created the purchase.
     def finalize
       result = Qonto::ExpenseFinalizer.call(find_item)

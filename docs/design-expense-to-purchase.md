@@ -183,5 +183,5 @@ non résolu, au seuil de 75 % d'accord). À créer si ce besoin apparaît.
 - `Qonto::ReceiptReader` : sous-processus `python3` depuis un répertoire neutre, délai de 90 s, résultat en cache 30 jours par document. Sans Python ou PyMuPDF, rend `nil` : rien ne casse.
 - `ExpenseSuggester` (facture reçue) : date et numéro manquants repris du justificatif ; fournisseur par SIRET s'il est unique ; une ligne par taux de TVA si la ventilation imprimée égale le montant payé (avant l'échelle du dernier achat) ; avertissement `receipt_amount_mismatch` si aucun total lu ne correspond.
 - Mesure sur 72 justificatifs réels : texte lisible 68, OCR 4 ; le montant payé figure parmi les totaux lus pour 56 sur 72 (les autres n'impriment que HT et TVA) ; SIRET 45, date 60, ventilation de TVA 22 (21 cohérentes).
-- Pas fait : récupérer les pièces jointes des transactions (`attachment_ids`) pour les lignes sans facture reçue. Il faut une action de l'utilisateur (téléchargement) et une resynchronisation préalable.
+- Pièces jointes des transactions : le bouton « Récupérer le justificatif » (lecture seule chez Qonto) télécharge les fichiers d une ligne ; le suggéreur lit le fichier attaché à la ligne et la finalisation le joint à l achat.
 - Prérequis d'installation : `pip install pymupdf` dans l'image de l'application (pour l'instant dans le compte du conteneur seulement).
