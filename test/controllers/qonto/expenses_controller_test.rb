@@ -2,9 +2,11 @@
 
 require 'test_helper'
 require_relative '../../test_helper'
+require_relative '../../support/qonto_lettering'
 
 module Qonto
   class ExpensesControllerTest < Ekylibre::Testing::ApplicationControllerTestCase::WithFixtures
+    include QontoLettering
     setup_sign_in
 
     setup do
@@ -42,6 +44,22 @@ module Qonto
       assert_equal :inbound_invoice, assigns(:suggestions)[@card.id].source
       assert_select 'a.btn-primary[href^=?]', new_backend_quick_purchase_path
       assert_select 'a[href*=?]', 'bank_statement_item_ids'
+    end
+
+    test '#index shows the supplier recognised from an earlier payment and the purchase it follows' do
+      @lettering_statement = @statement
+      mode = outgoing_payment_modes(:outgoing_payment_modes_001)
+      supplier = entities(:entities_008)
+      lettered_purchase(cash: mode.cash, mode: mode, supplier: supplier, label: 'O HANGAR')
+      model = @last_purchase
+
+      get :index, params: { current_financial_year: FinancialYear.on(Date.new(2019, 10, 15)).id }
+
+      assert_response :success
+      assert_equal :supplier_model, assigns(:suggestions)[@card.id].source
+      assert_select 'td', text: /#{Regexp.escape(supplier.full_name)}/
+      assert_select 'td', text: /#{Regexp.escape(model.number)}/
+      assert_select 'a.btn-primary[href^=?]', new_backend_quick_purchase_path
     end
 
     test '#ignore sets the line aside without touching its figures' do

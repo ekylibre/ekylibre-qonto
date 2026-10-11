@@ -61,7 +61,12 @@
                 - if suggestion && !suggestion.none?
                   = "expense_source_#{suggestion.source}".to_sym.tl
                   - if suggestion.supplier
-                    %span.qonto-sub= suggestion.supplier.full_name
+                    %span.qonto-sub
+                      = suggestion.supplier.full_name
+                      - if suggestion.supplier_how && suggestion.supplier_how != :inbound
+                        %span.text-muted= "(#{"expense_how_#{suggestion.supplier_how}".to_sym.tl})"
+                  - if suggestion.model_purchase
+                    %span.qonto-sub= :expense_model_from.tl(number: suggestion.model_purchase.number)
                   - if suggestion.reference_number.present?
                     %span.qonto-sub= suggestion.reference_number
                   - if suggestion.existing

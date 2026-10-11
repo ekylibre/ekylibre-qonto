@@ -7,6 +7,8 @@ module Qonto
   #
   #   source  :inbound_invoice   a supplier document Qonto matched to the line
   #           :existing_purchase a purchase already entered, still unpaid
+  #           :supplier_model    the supplier is known (from past payments) and its
+  #                              latest purchase gives the shape of this one
   #           :none              nothing usable
   #   confidence :high / :medium / :low
   #   items   [{ variant_id:, conditioning_unit_id:, conditioning_quantity:,
@@ -16,7 +18,7 @@ module Qonto
   class ExpenseSuggestion
     ATTRIBUTES = %i[
       item source confidence supplier nature_id invoiced_at reference_number description
-      items document inbound existing warnings provenance
+      items document inbound existing warnings provenance supplier_how model_purchase
     ].freeze
     AMOUNT_TOLERANCE = BigDecimal('0.01')
 
@@ -24,7 +26,7 @@ module Qonto
 
     def initialize(item:, source: :none, confidence: :low, supplier: nil, nature_id: nil, invoiced_at: nil,
                    reference_number: nil, description: nil, items: [], document: nil, inbound: nil, existing: nil,
-                   warnings: [], provenance: {})
+                   warnings: [], provenance: {}, supplier_how: nil, model_purchase: nil)
       @item = item
       @source = source
       @confidence = confidence
@@ -39,6 +41,8 @@ module Qonto
       @existing = existing
       @warnings = warnings
       @provenance = provenance
+      @supplier_how = supplier_how
+      @model_purchase = model_purchase
     end
 
     def none?
@@ -67,7 +71,7 @@ module Qonto
 
     # A purchase can be created from it (and not only looked at).
     def creatable?
-      source == :inbound_invoice && nature_id.present? && (warnings & BLOCKING_WARNINGS).empty?
+      %i[inbound_invoice supplier_model].include?(source) && nature_id.present? && (warnings & BLOCKING_WARNINGS).empty?
     end
 
     # Parameters of Backend::QuickPurchasesController#new.

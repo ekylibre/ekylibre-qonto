@@ -1,6 +1,6 @@
 # Conception : des dépenses Qonto aux achats Ekylibre
 
-Statut : proposition, rien n'est implémenté. Fait suite à la mesure du 2026-10-11 sur le tenant `admin`.
+Statut : phases 0, 1 et 2 implémentées (2026-10-11) ; phase 3 (lecture des justificatifs) à faire. Fait suite à la mesure du 2026-10-11 sur le tenant `admin`.
 
 ## 1. Constat qui oriente la conception
 Sur 1 122 dépenses Qonto, 96 ne sont pas rapprochées (90 en 2026). Pour ces 96 :
@@ -170,3 +170,10 @@ ou compléter, jamais à écraser une valeur de Qonto ou de l'historique. L'imag
   dans ce cas on garde le montant HT de Qonto.
 - **Photos** : sans moteur d'OCR, les justificatifs image restent à saisir à la main.
 - **Données personnelles** : le texte lu est stocké avec le document, sur le serveur de l'exploitation seulement.
+
+## 12. Écart avec la conception : pas de table de règles (phase 2)
+`qonto_expense_rules` n'a pas été créée. Chaque achat validé depuis une ligne est lettré avec elle : l'historique des
+rapprochements (libellé ou IBAN vers tiers, tiers vers dernier achat) joue déjà le rôle des règles, sans rien à
+entretenir, et il s'améliore à chaque validation. Une table ne se justifierait que pour corriger un cas où l'historique
+se trompe de façon persistante (par exemple un libellé payé tantôt à un tiers, tantôt à un autre : il est alors laissé
+non résolu, au seuil de 75 % d'accord). À créer si ce besoin apparaît.

@@ -6,7 +6,8 @@ require_relative '../../test_helper'
 class Qonto::ExpenseSuggesterTest < ::Ekylibre::Testing::ApplicationTestCase::WithFixtures
   setup do
     @cash = cashes(:cashes_001)
-    @supplier = entities(:entities_008)
+    # No earlier purchase: the lines come from the document alone, not from a model.
+    @supplier = Entity.where.not(id: PurchaseInvoice.select(:supplier_id)).where.not(id: Entity.of_company.id).first
     @tax = Tax.where(amount: 20).first || create_tax(20)
     @item = create_item('tx-1', debit: 120.0)
   end

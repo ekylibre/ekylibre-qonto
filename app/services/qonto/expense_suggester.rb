@@ -7,7 +7,9 @@ module Qonto
   #   1. the supplier document Qonto itself matched to the transaction
   #      (payload.matched_transactions): supplier, number, date and lines;
   #   2. a purchase already entered but not paid (same supplier or same total):
-  #      creating another would count the expense twice.
+  #      creating another would count the expense twice;
+  #   3. the supplier found from what was done for the same label before, and
+  #      the shape of its latest purchase (nature, article, tax).
   #
   # Pure: nothing is written. Build it once for a page of lines, so the
   # lookups are done once.
@@ -31,12 +33,13 @@ module Qonto
       @inbound_by_transaction = index_inbound
       @own_company = OwnCompany.current
       @purchase_duplicates = duplicates_for(items)
+      @resolver = nil
     end
 
     def suggest(item)
       inbound = @inbound_by_transaction[self.class.qonto_id(item)]
       suggestion = from_inbound(item, inbound) if inbound
-      suggestion || existing_purchase(item) || ExpenseSuggestion.new(item: item)
+      suggestion || existing_purchase(item) || supplier_model(item) || ExpenseSuggestion.new(item: item)
     end
 
     private
@@ -61,7 +64,8 @@ module Qonto
         warnings = []
         warnings << :own_company if @own_company.issued?(inbound)
         warnings << :credit_note if credit_note?(inbound)
-        warnings << :no_supplier unless inbound.entity
+        supplier, supplier_how = inbound.entity ? [inbound.entity, :inbound] : resolved_supplier(item)
+        warnings << :no_supplier unless supplier
         nature = nature_for(inbound)
         warnings << :no_nature unless nature
 
@@ -72,13 +76,16 @@ module Qonto
           )
         end
 
-        items = items_for(inbound, item.debit.to_d)
+        # A document without lines says nothing of what was bought: the supplier's
+        # previous purchase does.
+        model = inbound.line_items.empty? && supplier ? model_for(supplier, item) : nil
+        items = model ? model.items : items_for(inbound, item.debit.to_d)
         suggestion = ExpenseSuggestion.new(
           item: item, source: :inbound_invoice, confidence: confidence_for(inbound, warnings),
-          supplier: inbound.entity, nature_id: nature&.id, invoiced_at: invoiced_at(inbound, item),
+          supplier: supplier, supplier_how: supplier_how, nature_id: nature&.id, invoiced_at: invoiced_at(inbound, item),
           reference_number: inbound.invoice_number, description: inbound.supplier_name, items: items,
-          document: inbound.document, inbound: inbound, warnings: warnings,
-          provenance: provenance_for(inbound)
+          document: inbound.document, inbound: inbound, warnings: warnings, model_purchase: model&.purchase,
+          provenance: provenance_for(inbound).merge(model ? { items: :history } : {}).merge(supplier_how == :inbound || supplier.nil? ? {} : { supplier: :history })
         )
         suggestion.warnings << :amount_mismatch unless suggestion.balanced?
         suggestion
@@ -166,6 +173,41 @@ module Qonto
           item: item, source: :existing_purchase, confidence: :medium, existing: purchase, supplier: purchase.supplier,
           warnings: [:already_entered], provenance: { existing: :history }
         )
+      end
+
+      # No document, but the supplier is known from past payments of this label.
+      def supplier_model(item)
+        supplier, how = resolved_supplier(item)
+        return nil unless supplier
+
+        model = model_for(supplier, item)
+        nature = model ? model.nature_id : Qonto::PurchaseDefaults.default_nature&.id
+        evidence = @last_evidence.to_i
+        ExpenseSuggestion.new(
+          item: item, source: :supplier_model, confidence: model && evidence >= 2 ? :medium : :low,
+          supplier: supplier, supplier_how: how, nature_id: nature, invoiced_at: payment_date(item),
+          description: item.name, items: model ? model.items : [], model_purchase: model&.purchase,
+          warnings: model ? [] : [:no_model],
+          provenance: { supplier: :history, items: (model ? :history : nil), nature: (model ? :history : :default) }.compact
+        )
+      end
+
+      def resolved_supplier(item)
+        @resolver ||= SupplierResolver.new
+        result = @resolver.resolve(item)
+        @last_evidence = result&.evidence
+        result ? [result.entity, result.how] : [nil, nil]
+      end
+
+      def model_for(supplier, item)
+        data = (item.provider || {}).to_h
+        data = (data[:data] || data['data']).to_h.stringify_keys
+        Qonto::LastPurchaseTemplate.for(supplier, item.debit.to_d, vat_details: data['vat_details'])
+      end
+
+      # The day the payment was made, when an exercise is open on it.
+      def payment_date(item)
+        [item.initiated_on, item.transfered_on].compact.find { |date| FinancialYear.on(date)&.opened? } || item.transfered_on
       end
 
       # Paid, at least in part: the bank line is not what it is waiting for.
