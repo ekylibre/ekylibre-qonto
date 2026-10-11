@@ -8,8 +8,11 @@ module Qonto
   class OutboundInvoice < ApplicationRecord
     self.table_name = 'qonto_outbound_invoices'
 
-    STATUSES = %w[pending submitted issued received failed].freeze
-    IN_PROGRESS = %w[pending submitted issued].freeze
+    # submitting: a worker holds the sending right now (see SendEInvoiceService#claim).
+    STATUSES = %w[pending submitting submitted issued received failed].freeze
+    IN_PROGRESS = %w[pending submitting submitted issued].freeze
+    # A worker that died mid-sending must not block the invoice forever.
+    SUBMITTING_STALE_AFTER = 10.minutes
 
     # Lifecycle steps shown in the timeline: Qonto status_code → label → the
     # local status it drives (200 Déposée, 201 Émise, 202 Reçue).
@@ -36,6 +39,12 @@ module Qonto
 
     def failed?
       status == 'failed'
+    end
+
+    # Whether a worker may take the sending: never started, failed before, or
+    # abandoned while submitting. Anything else is already out or being sent.
+    def claimable?
+      status == 'pending' || failed? || (status == 'submitting' && updated_at < SUBMITTING_STALE_AFTER.ago)
     end
 
     def received?

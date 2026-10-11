@@ -46,23 +46,33 @@ module Qonto
       new(*args).call
     end
 
-    def initialize(cash:)
+    # @param items [Array<BankStatementItem>, nil] only these lines (one click on
+    #   the expenses screen); every Qonto line of the cash when absent
+    def initialize(cash: nil, items: nil)
       @cash = cash
+      @items = items
     end
 
+    # @return [Integer] documents newly attached
     def call
-      bank_statement_items.each do |bsi|
+      attached = 0
+      lines.each do |bsi|
         Array(bsi.provider_data[:attachment_ids]).each do |id|
           attachment = get_attachment(id)
           next if attachment.nil?
 
-          link_document(bsi, attachment)
+          attached += 1 if link_document(bsi, attachment)
         end
       end
+      attached
     end
 
     private
       attr_reader :cash
+
+      def lines
+        @items || bank_statement_items
+      end
 
       # Only the qonto items of THIS cash, instead of every qonto item of the
       # tenant (which made each sync grow unbounded and re-scan foreign cashes).
@@ -81,10 +91,13 @@ module Qonto
         end
       end
 
+      # The file is downloaded once per Qonto attachment; a document already
+      # known is only attached to this line when it is not yet.
       def link_document(bsi, attachment)
-        return nil if Document.find_by(key: attachment.id)
+        doc = Document.find_by(key: attachment.id)
+        return nil if doc && bsi.attachments.exists?(document_id: doc.id)
 
-        doc = Document.new(key: attachment.id, name: attachment.file_name, file: URI.parse(attachment.url).open)
+        doc ||= Document.new(key: attachment.id, name: attachment.file_name, file: URI.parse(attachment.url).open)
         bsi.attachments.create!(document: doc)
       end
 

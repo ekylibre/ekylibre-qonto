@@ -21,6 +21,8 @@ module Qonto
     BASE_URL = 'https://thirdparty.qonto.com/v2'.freeze
     # Max page size accepted by the Qonto Business API.
     PER_PAGE = 100
+    # Extra data the list leaves out: VAT split per rate and the labels.
+    TRANSACTION_INCLUDES = '&includes[]=vat_details&includes[]=labels'.freeze
 
     authenticate_with :check do
       parameter :client_id
@@ -62,7 +64,7 @@ module Qonto
 
       loop do
         next_page = nil
-        url = "#{BASE_URL}/transactions?iban=#{iban}&current_page=#{current_page}&per_page=#{PER_PAGE}"
+        url = "#{BASE_URL}/transactions?iban=#{iban}&current_page=#{current_page}&per_page=#{PER_PAGE}#{TRANSACTION_INCLUDES}"
         response = get_json(url, authentication_header(integration)) do |r|
           r.success do
             body = JSON(r.body).deep_symbolize_keys

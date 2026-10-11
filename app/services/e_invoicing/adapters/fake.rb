@@ -40,16 +40,29 @@ module EInvoicing
 
       # Happy path → Result(remote_id) and records the first lifecycle event.
       # Unreachable recipient → regulatory 412 failure, no invoice created.
-      def submit(sale)
+      def submit(sale, remote_id: nil, on_created: nil)
+        @submissions = (@submissions || 0) + 1
         recipient = sale.respond_to?(:client) ? sale.client : nil
         unless recipient_reachable?(recipient) == true
           return Result.failure('recipient_not_reachable_on_einvoicing')
         end
 
-        @seq += 1
-        remote_id = "fake-einvoice-#{@seq}"
-        @invoices[remote_id] = { events: [event(STEPS.first)] }
+        # Same contract as the real adapter: an invoice already created is sent,
+        # not created again.
+        unless remote_id
+          @seq += 1
+          remote_id = "fake-einvoice-#{@seq}"
+          @invoices[remote_id] = { events: [] }
+          on_created&.call(remote_id)
+        end
+        @invoices[remote_id] ||= { events: [] }
+        @invoices[remote_id][:events] = [event(STEPS.first)] if @invoices[remote_id][:events].empty?
         Result.success(remote_id)
+      end
+
+      # How many times submit was asked: lets a test prove nothing was sent twice.
+      def submissions
+        @submissions || 0
       end
 
       # Simulates the PA / webhook pushing the invoice to its next state.
@@ -77,6 +90,17 @@ module EInvoicing
       # Test/staging helper: preload inbound invoices.
       def stub_inbound(list)
         @inbound = Array(list)
+        self
+      end
+
+      # Attachment lookup, like Qonto's: id → { url:, content_type:, file_name: }.
+      def attachment(id)
+        (@attachments ||= {})[id.to_s]
+      end
+
+      # Test/staging helper: preload downloadable attachments.
+      def stub_attachments(map)
+        @attachments = map.each_with_object({}) { |(id, info), h| h[id.to_s] = info }
         self
       end
 

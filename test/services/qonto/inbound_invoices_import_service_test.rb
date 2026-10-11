@@ -45,7 +45,7 @@ class Qonto::InboundInvoicesImportServiceTest < ::Ekylibre::Testing::Application
     document = Document.create!(nature: 'purchases_invoice', key: 'k-att', name: 'n', processable_attachment: false)
     invoices = [normalized(remote_id: 'doc-1', siret: nil, number: 'D-1', amount: 10).merge(file_url: 'https://files.qonto.test/d1.pdf', file_name: 'd1.pdf')]
 
-    stub = ->(remote_id:, url:, name:) { document }
+    stub = ->(remote_id:, url:, name:, nature:) { document }
     Qonto::InboundDocumentDownloader.stub(:call, stub) do
       Qonto::InboundInvoicesImportService.call(invoices: invoices)
     end

@@ -1,40 +1,153 @@
-- main_informations do
-  %ul.nav.nav-tabs
-    - Qonto::InboundInvoice::STATUSES.each do |status|
-      %li{ class: ('active' if status == @status) }
-        = link_to qonto_inbound_invoices_path(status: status) do
-          = "einvoice_status_#{status}".to_sym.tl
-          %span.badge= @counts[status].to_i
+-# The exercise selector of the accountancy dashboard (heading toolbar).
+- main_financial_year_selector(current_financial_year.id) if current_financial_year
+= main_informations do
+  :css
+    .qonto-inbox .nav-pills { margin: 12px 0 8px; }
+    /* One <tbody> per document: the invoice row and its lines read as one unit. */
+    .qonto-inbox table.qonto-table { margin-bottom: 0; }
+    .qonto-inbox table.qonto-table > tbody.qonto-doc { border-top: 1px solid #dde1e6; }
+    .qonto-inbox table.qonto-table > tbody.qonto-doc:hover { background: #f4f7fb; }
+    .qonto-inbox table.qonto-table > tbody > tr > td { border-top: 0; vertical-align: middle; padding: 7px 8px; }
+    .qonto-inbox table.qonto-table > thead > tr > th { border-bottom: 1px solid #c9cfd6; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; color: #6b7480; white-space: nowrap; }
+    .qonto-inbox .qonto-date { white-space: nowrap; width: 1%; }
+    .qonto-inbox .qonto-amount { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+    .qonto-inbox .qonto-amount small { display: block; color: #8a929c; }
+    .qonto-inbox .qonto-actions { white-space: nowrap; text-align: right; width: 1%; }
+    .qonto-inbox .qonto-number { white-space: nowrap; }
+    .qonto-inbox .qonto-doc-link { margin-left: 6px; font-size: 11px; }
+    .qonto-inbox .qonto-lines-row > td { padding: 0 8px 8px 24px; }
+    .qonto-inbox details > summary { cursor: pointer; font-size: 12px; color: #6b7480; list-style: none; outline: none; }
+    .qonto-inbox details > summary::-webkit-details-marker { display: none; }
+    .qonto-inbox details > summary::before { content: '\25B8\00a0'; }
+    .qonto-inbox details[open] > summary::before { content: '\25BE\00a0'; }
+    .qonto-inbox details > summary:hover { color: #2a6db0; }
+    .qonto-inbox .qonto-lines { margin: 6px 0 0; background: #f8f9fb; font-size: 12px; }
+    .qonto-inbox .qonto-lines > thead > tr > th { font-size: 11px; color: #8a929c; border-bottom: 1px solid #e3e7ec; padding: 4px 8px; }
+    .qonto-inbox .qonto-lines > tbody > tr > td { padding: 4px 8px; border-top: 1px solid #eceff3; font-variant-numeric: tabular-nums; }
+    .qonto-inbox .qonto-lines .qonto-num { text-align: right; white-space: nowrap; }
+    .qonto-inbox .qonto-associate { margin-top: 4px; }
+    .qonto-inbox .qonto-associate form { margin-top: 6px; display: flex; gap: 6px; align-items: center; }
 
-  - if @inbound_invoices.empty?
-    %p.text-muted.text-center{ style: 'padding: 2em' }= :einvoicing_inbox_empty.tl
-  - else
-    %table.table.table-striped.table-hover
-      %thead
-        %tr
-          %th= :issued_on.tl
-          %th= :supplier.tl
-          %th= :invoice_number.tl
-          %th.right-align= :amount.tl
-          %th
-      %tbody
-        - @inbound_invoices.each do |invoice|
+  .qonto-inbox
+    -# One tab per kind: they are not the same object in Ekylibre. The badge counts what is still to review.
+    %ul.nav.nav-tabs
+      - Qonto::InboundInvoice::KINDS.each do |kind|
+        %li{ class: ('active' if kind == @kind) }
+          = link_to qonto_inbound_invoices_path(kind: kind) do
+            = "einvoice_kind_#{kind}".to_sym.tl
+            - if @to_review_counts[kind].to_i.positive?
+              %span.badge= @to_review_counts[kind]
+
+    %ul.nav.nav-pills
+      - Qonto::InboundInvoice::STATUSES.each do |status|
+        %li{ class: ('active' if status == @status) }
+          = link_to qonto_inbound_invoices_path(kind: @kind, status: status) do
+            = "einvoice_status_#{status}".to_sym.tl
+            %span.badge= @counts[status].to_i
+
+    - if @to_review_elsewhere.positive?
+      %p.text-muted{ style: 'font-size: 12px; margin: 0 0 8px' }= :einvoice_to_review_other_years.tl(count: @to_review_elsewhere)
+
+    - if @inbound_invoices.empty?
+      %p.text-muted.text-center{ style: 'padding: 2em' }= :einvoicing_inbox_empty.tl
+    - else
+      %table.table.qonto-table
+        %thead
           %tr
-            %td= invoice.issued_on&.l
-            %td
-              - if invoice.supplier_known?
-                %span.label.label-success= invoice.entity.full_name
-              - else
-                %span.label.label-warning{ title: invoice.supplier_siret }= invoice.supplier_name.presence || :unknown_supplier.tl
+            %th= :issued_on.tl
+            %th= :supplier.tl
+            %th= :invoice_number.tl
+            %th.qonto-amount= :amount.tl
+            %th
+        - @inbound_invoices.each do |invoice|
+          - lines = invoice.line_items
+          %tbody.qonto-doc
+            %tr
+              -# Qonto leaves the invoice date empty on many documents: fall back to the day it arrived, shown muted.
+              %td.qonto-date
+                - if invoice.issued_on
+                  = invoice.issued_on.l
+                - else
+                  %span.text-muted{ title: :received_on.tl }= invoice.created_at.to_date.l
+              %td
+                - if invoice.supplier_known?
+                  %span.label.label-success= invoice.entity.full_name
+                - else
+                  %span.label.label-warning{ title: invoice.supplier_siret }= invoice.supplier_name.presence || :unknown_supplier.tl
+                  -# The form is the heaviest part of a row: only unfolded when needed.
+                  - if invoice.to_review? && invoice.purchasable?
+                    %details.qonto-associate
+                      %summary= :associate_a_supplier.tl
+                      = simple_form_for invoice, url: attach_supplier_qonto_inbound_invoice_path(invoice), method: :post, builder: Backend::FormBuilder, html: { class: 'form-inline qonto-attach-supplier' } do |f|
+                        = f.referenced_association :entity, source: { controller: '/backend/entities', action: :unroll, scope: :suppliers }, new: { controller: '/backend/entities', action: :new }, label: false, placeholder: :associate_a_supplier.tl
+                        = f.submit :associate.tl, class: 'btn btn-default btn-xs'
+              -# What makes "Create the purchase" the wrong move, computed once per page by the controller.
+              - to_handle = invoice.to_review? && invoice.purchasable?
+              - own = to_handle && @own_company.issued?(invoice)
+              - existing = to_handle && !own && @existing_purchases[invoice.id]
+              - original = @inbox_originals[invoice.id]
+              %td.qonto-number
+                = invoice.invoice_number
+                - if invoice.document
+                  = link_to 'PDF', backend_document_path(invoice.document), target: '_blank', class: 'qonto-doc-link', title: :see_the_document.tl
+                - if own
+                  %br
+                  %span.label.label-info{ title: :own_invoice_title.tl }= :own_invoice.tl
+                  - sale = @own_company.sale_for(invoice)
+                  - if sale
+                    = link_to :view_the_sale.tl, backend_sale_path(sale), class: 'qonto-doc-link'
+                - if existing
+                  %br
+                  %span.label.label-danger{ title: "already_entered_#{existing.certainty}".to_sym.tl }= :already_entered.tl
+                  = link_to existing.purchase.number, backend_purchase_path(existing.purchase), class: 'qonto-doc-link'
+                - if original
+                  %br
+                  %span.label.label-warning{ title: :possible_duplicate_title.tl(date: original.created_at.to_date.l) }= :possible_duplicate.tl
+              %td.qonto-amount
+                - if invoice.amount
+                  %strong= "#{number_with_precision(invoice.amount, precision: 2)} #{invoice.currency}"
+                - if invoice.pretax_amount
+                  %small= "#{number_with_precision(invoice.pretax_amount, precision: 2)} #{:excluding_taxes.tl}"
+              %td.qonto-actions
                 - if invoice.to_review?
-                  = simple_form_for invoice, url: attach_supplier_qonto_inbound_invoice_path(invoice), method: :post, builder: Backend::FormBuilder, html: { class: 'form-inline qonto-attach-supplier' } do |f|
-                    = f.referenced_association :entity, source: { controller: '/backend/entities', action: :unroll, scope: :suppliers }, new: { controller: '/backend/entities', action: :new }, label: false, placeholder: :associate_a_supplier.tl
-                    = f.submit :associate.tl, class: 'btn btn-default btn-xs'
-            %td= invoice.invoice_number
-            %td.right-align= "#{invoice.amount} #{invoice.currency}"
-            %td.right-align
-              - if invoice.to_review?
-                = link_to :create_the_purchase.tl, create_purchase_qonto_inbound_invoice_path(invoice), method: :post, class: 'btn btn-primary btn-xs'
-                = link_to :ignore.tl, ignore_qonto_inbound_invoice_path(invoice), method: :post, class: 'btn btn-default btn-xs'
-              - elsif invoice.matched? && invoice.purchase_id
-                = link_to :view_the_purchase.tl, backend_purchase_path(invoice.purchase_id), class: 'btn btn-default btn-xs'
+                  - if invoice.purchasable?
+                    - if own
+                      -# issued by your company: not a purchase, only ignore it
+                    - elsif existing
+                      = link_to :link_to_existing_purchase.tl(number: existing.purchase.number), link_purchase_qonto_inbound_invoice_path(invoice, purchase_id: existing.purchase.id), method: :post, class: 'btn btn-primary btn-xs'
+                      = link_to :create_anyway.tl, create_purchase_qonto_inbound_invoice_path(invoice, force: 1), method: :post, class: 'btn btn-default btn-xs', data: { confirm: :create_anyway_confirm.tl }
+                    - else
+                      = link_to (invoice.expense? ? :create_the_expense_report.tl : :create_the_purchase.tl), create_purchase_qonto_inbound_invoice_path(invoice), method: :post, class: 'btn btn-primary btn-xs'
+                  - else
+                    = link_to :attach_to_statement.tl, attach_to_statement_qonto_inbound_invoice_path(invoice), method: :post, class: 'btn btn-primary btn-xs'
+                  = link_to :ignore.tl, ignore_qonto_inbound_invoice_path(invoice), method: :post, class: 'btn btn-default btn-xs'
+                - elsif invoice.matched? && invoice.purchase_id
+                  = link_to :view_the_purchase.tl, backend_purchase_path(invoice.purchase_id), class: 'btn btn-default btn-xs'
+                - elsif invoice.matched?
+                  %span.text-muted= :attached_to_statement.tl
+            -# The app does not load Bootstrap's collapse plugin: a native <details> needs no script. Folded by default.
+            - if lines.any?
+              %tr.qonto-lines-row
+                %td{ colspan: 5 }
+                  %details{ id: "qonto-lines-#{invoice.id}" }
+                    %summary= :einvoice_lines_count.tl(count: lines.size)
+                    %table.table.table-condensed.qonto-lines
+                      %thead
+                        %tr
+                          %th= :label.tl
+                          %th.qonto-num= :quantity.tl
+                          %th.qonto-num= :unit_pretax_amount.tl
+                          %th.qonto-num= :vat_rate.tl
+                          %th.qonto-num= :pretax_amount.tl
+                      %tbody
+                        - lines.each do |line|
+                          %tr
+                            %td
+                              = line[:label]
+                              - if line[:description].present?
+                                %br
+                                %small.text-muted= line[:description]
+                            %td.qonto-num= [line[:quantity], (line[:unit_code] unless %w[C62 ZZ H87 EA].include?(line[:unit_code]))].compact.join(' ')
+                            %td.qonto-num= line[:unit_pretax_amount]
+                            %td.qonto-num= line[:vat_rate].present? ? "#{line[:vat_rate]} %" : ''
+                            %td.qonto-num= line[:total_pretax_amount]

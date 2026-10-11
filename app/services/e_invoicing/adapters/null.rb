@@ -14,7 +14,7 @@ module EInvoicing
         :unknown
       end
 
-      def submit(_sale)
+      def submit(_sale, remote_id: nil, on_created: nil)
         Result.failure(:not_configured, 'No e-invoicing integration for this tenant')
       end
 
@@ -24,6 +24,10 @@ module EInvoicing
 
       def inbound_since(_datetime)
         []
+      end
+
+      def attachment(_id)
+        nil
       end
     end
   end

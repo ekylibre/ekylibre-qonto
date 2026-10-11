@@ -4,14 +4,11 @@ module EInvoicing
   module Adapters
     # Qonto (Plateforme Agréée) implementation.
     #
-    # This increment wires only the two safe, read-only lookups that exist
-    # outside the e-invoicing network (which is production-only and cannot be
-    # exercised in sandbox):
-    #   - connection_status  → GET /v2/einvoicing/settings
-    #   - recipient_reachable? → GET /v2/clients (e_invoicing_reachable)
-    #
-    # submit / lifecycle / inbound_since belong to later lots (emission &
-    # reception) and raise NotImplementedError on purpose.
+    # Reception (inbound_since, attachment) and the read-only lookups
+    # (connection_status, recipient_reachable?) are plain GETs and can be
+    # exercised against a real account. Emission (submit / lifecycle) is
+    # production-only: the e-invoicing network has no sandbox, so its state
+    # machine is covered by the Fake adapter in tests.
     class Qonto < Gateway
       # Idempotency link stored on the Entity's `provider` jsonb: an Ekylibre
       # organization maps to exactly one Qonto client, so we never create a
@@ -44,7 +41,13 @@ module EInvoicing
       # invoice referencing its client_id, then request e-invoice sending.
       # Production only (no sandbox e-invoicing); the state machine is covered by
       # the Fake adapter in tests.
-      def submit(sale)
+      #
+      # The two POSTs are not atomic, so a retry must never create a second
+      # invoice: once the platform created one, +on_created+ hands its id back
+      # at once, and a later attempt passes it as +remote_id+ to only send it.
+      def submit(sale, remote_id: nil, on_created: nil)
+        return request_sending(remote_id, reused: true) if remote_id.present?
+
         # Cheap local prerequisite first, before any network round-trip.
         iban = organization_iban
         return Result.failure('missing_iban', 'No bank account IBAN to receive the payment') if iban.blank?
@@ -57,12 +60,10 @@ module EInvoicing
         remote_id = extract_id(created, :client_invoice)
         return Result.failure('create_failed', error_detail(created)) if remote_id.blank?
 
-        sent = execute_result(::Qonto::QontoIntegration.send_client_invoice(remote_id))
-        return Result.success(remote_id.to_s) if sent == true
-
-        Result.failure(error_code(sent), error_detail(sent))
+        notify_created(on_created, remote_id.to_s)
+        request_sending(remote_id, reused: false)
       rescue StandardError => e
-        Rails.logger.warn("[Qonto][einvoicing] submit failed: #{e.class}: #{e.message}")
+        Rails.logger.warn("[Qonto][einvoicing] submit failed: #{e.class}: #{e.message} (#{e.backtrace&.first})")
         Result.failure('submit_failed', e.message)
       end
 
@@ -92,7 +93,47 @@ module EInvoicing
         Array(body[:supplier_invoices]).map { |raw| normalize_inbound(raw) }
       end
 
+      # GET /v2/attachments/{id} — where the file of an invoice really lives:
+      # the supplier-invoice list carries ids only, never a URL. The URL is a
+      # short-lived signed link, so it is resolved when the file is needed.
+      # @return [Hash, nil] { url:, content_type:, file_name:, size: }
+      def attachment(id)
+        return nil if id.blank?
+
+        body = execute_result(::Qonto::QontoIntegration.show_attachment(id))
+        data = unwrap(body, :attachment)
+        return nil if data[:url].blank?
+
+        { url: data[:url], content_type: data[:file_content_type], file_name: data[:file_name], size: data[:file_size]&.to_i }
+      rescue StandardError => e
+        Rails.logger.warn("[Qonto][einvoicing] attachment #{id} failed: #{e.class}: #{e.message}")
+        nil
+      end
+
       private
+
+        # POST send_by_einvoice. On a retry the invoice may already have gone
+        # out (the answer got lost): the platform then says it is no longer a
+        # draft, which means done, not failed.
+        def request_sending(remote_id, reused:)
+          sent = execute_result(::Qonto::QontoIntegration.send_client_invoice(remote_id))
+          return Result.success(remote_id.to_s) if sent == true
+
+          code = error_code(sent)
+          return Result.success(remote_id.to_s) if reused && code == 'invoice_not_in_draft_status'
+
+          Result.failure(code, error_detail(sent))
+        rescue StandardError => e
+          Rails.logger.warn("[Qonto][einvoicing] sending failed: #{e.class}: #{e.message}")
+          Result.failure('submit_failed', e.message)
+        end
+
+        # A failing callback must not stop the sending of an invoice that now exists.
+        def notify_created(callback, remote_id)
+          callback&.call(remote_id)
+        rescue StandardError => e
+          Rails.logger.error("[Qonto][einvoicing] could not record invoice #{remote_id}: #{e.class}: #{e.message}")
+        end
 
         def call_settings
           ::Qonto::QontoIntegration.einvoicing_settings.execute do |c|
@@ -122,26 +163,55 @@ module EInvoicing
           nil
         end
 
-        # Tolerant mapping from the raw Qonto supplier-invoice payload to the
-        # gateway's regulatory shape. Unknown/renamed fields degrade to nil
-        # rather than raising — the raw payload is kept under :payload.
+        # Maps the raw Qonto supplier-invoice payload to the gateway's regulatory
+        # shape, keeping the raw payload under :payload for replayability.
+        #
+        # Field names are the ones GET /v2/supplier_invoices really returns
+        # (checked against a live account, not guessed). What Qonto does not
+        # give in the list — the file URL and the invoice lines — is resolved
+        # later from the attachment (see Qonto::InboundInvoicesImportService).
         def normalize_inbound(raw)
-          total = raw[:total_amount] || {}
+          total = money(raw[:total_amount])
+          tax = money(raw[:total_tax_amount])
+          pretax = money(raw[:total_amount_excluding_taxes])
+          pretax ||= total - tax if total && tax
+
           {
             remote_id: raw[:id].to_s,
-            supplier_name: raw[:supplier_name] || raw.dig(:supplier, :name),
-            supplier_siret: raw[:supplier_siret] || raw.dig(:supplier, :tax_identification_number),
-            invoice_number: raw[:invoice_number] || raw[:number],
-            currency: total[:currency] || raw[:currency],
-            amount: (total[:value] || raw[:total_amount_value] || raw[:amount])&.to_d,
-            pretax_amount: (raw[:total_amount_excluding_vat] || raw[:pretax_amount])&.to_d,
-            issued_on: safe_date(raw[:issue_date] || raw[:issued_on]),
-            due_on: safe_date(raw[:due_date] || raw[:due_on]),
-            file_url: raw[:file_url] || raw[:pdf_url] || raw.dig(:attachment, :url) || raw.dig(:file, :url),
-            file_name: raw[:file_name] || raw.dig(:attachment, :file_name) || raw.dig(:attachment, :name),
+            kind: ::Qonto::InboundKind.for(raw),
+            supplier_name: raw[:supplier_name].presence || raw[:issuer_name].presence ||
+                           raw.dig(:supplier_snapshot, :name).presence || raw.dig(:seller, :name).presence,
+            # SIREN (9 digits) or SIRET (14): Qonto gives whichever the issuer filled in.
+            supplier_siret: digits(raw[:tin_number] || raw.dig(:seller, :tin)),
+            supplier_vat: (raw[:vat_number] || raw.dig(:seller, :vat_number)).to_s.strip.presence,
+            invoice_number: raw[:invoice_number].presence || raw[:number].presence,
+            currency: raw.dig(:total_amount, :currency) || raw[:currency],
+            amount: total,
+            pretax_amount: pretax,
+            issued_on: safe_date(raw[:issue_date]),
+            due_on: safe_date(raw[:due_date]),
+            credit_note: raw[:is_credit_note] == true,
+            remote_status: raw[:status],
+            attachment_id: raw[:attachment_id],
+            display_attachment_id: raw[:display_attachment_id] || raw[:attachment_id],
+            # e-invoices carry a structured XML apart from the displayable PDF.
+            structured: raw[:attachment_id].present? && raw[:display_attachment_id].present? &&
+                        raw[:attachment_id] != raw[:display_attachment_id],
             lines: normalize_lines(raw),
             payload: raw
           }
+        end
+
+        # { value: "12.30", currency: "EUR" } → BigDecimal, nil when absent.
+        def money(hash)
+          value = hash.is_a?(Hash) ? hash[:value] : nil
+          value.to_s.strip.empty? ? nil : BigDecimal(value.to_s)
+        rescue ArgumentError
+          nil
+        end
+
+        def digits(value)
+          value.to_s.gsub(/\D/, '').presence
         end
 
         def safe_date(value)

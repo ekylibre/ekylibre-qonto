@@ -52,8 +52,14 @@ module EInvoicing
     end
 
     # @param sale [Sale]
+    # @param remote_id [String, nil] the invoice already created on the platform
+    #   by an earlier attempt that failed afterwards: it is sent, never created
+    #   again (a second draft would be a second invoice for the same sale).
+    # @param on_created [#call, nil] called with the remote id as soon as the
+    #   platform has created the invoice, before it is sent, so a failure of
+    #   the sending still leaves the caller knowing which invoice it is.
     # @return [Result] value = remote_id on success
-    def submit(_sale)
+    def submit(_sale, remote_id: nil, on_created: nil)
       raise NotImplementedError
     end
 
@@ -66,6 +72,14 @@ module EInvoicing
     # @param datetime [Time]
     # @return [Array<Hash>] raw inbound invoices
     def inbound_since(_datetime)
+      raise NotImplementedError
+    end
+
+    # Resolves the downloadable file of a received document. The inbound list
+    # only carries ids; the (short-lived) URL has to be asked for.
+    # @param id [String] attachment id
+    # @return [Hash, nil] { url:, content_type:, file_name:, size: }
+    def attachment(_id)
       raise NotImplementedError
     end
   end
